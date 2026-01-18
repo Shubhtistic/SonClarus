@@ -1,0 +1,16 @@
+Project Name: Sonclarus
+Type: Open Source Research Platform (Hybrid Cloud)
+Maintained By: Sonclarus Team
+Date: January 18, 2026
+
+OWNERSHIP STATEMENT:
+This software, including the "Hybrid Swap-Memory" architecture and the integration logic of AWS Lambda with Celery, is the intellectual property of the Sonclarus Team.
+
+CORE DEVELOPERS:
+- Shubham Pawar
+- Mihir Revaskar
+- Ishana Chandra
+- Paramjyot Singh
+
+COMMERCIAL USE:
+You are free to use this code for commercial purposes under the terms of the MIT License, provided the original copyright notice and citation are preserved.
