@@ -1,0 +1,24 @@
+# env files
+.env
+.env.*
+
+# Heavy AI & Audio Files
+models/
+uploads/
+processed/
+*.wav
+*.mp3
+*.pt
+*.pth
+
+# Python Junk (Generated automatically)
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# OS & Editor Junk
+.DS_Store
+.vscode/
+.idea/
+*.log
