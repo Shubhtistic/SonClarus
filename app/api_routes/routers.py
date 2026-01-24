@@ -1,13 +1,13 @@
 from fastapi import APIRouter
 
-route = APIRouter()
+router = APIRouter()
 
 
-@route.get("/")
+@router.get("/")
 def root():
     return {"message": "Sonclarus is alive (via Router)"}
 
 
-@route.get("/status")
+@router.get("/status")
 def read_status():
     return {"status": "Operational", "mode": "Dev"}
