@@ -1,6 +1,9 @@
 # this endpoints takes the files and checks if it an valid wav file
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.db_models import ProcessJob
+from app.db.database_session import get_db_session
 
 import shutil
 # shutil stand for shell utilities and its used for heavy tasks with files, like
@@ -23,12 +26,13 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # os tells the system to make an dir called as 'Upload_Dir' and
 # then with exist_ok=true is it already present we ignore it
 
+
 router = APIRouter()
 
 
 @router.post("/uploads", response_model=FileUpload)
 async def upload_audio(
-    file: UploadFile = File(...),
+    file: UploadFile = File(...), db: AsyncSession = Depends(get_db_session)
 ):  ### ... means this endpoint cant be hit without an file
     if not file.filename.endswith(".wav"):
         raise HTTPException(
@@ -37,7 +41,7 @@ async def upload_audio(
         )
     job_id = str(uuid4())[:16]
 
-    new_filename = f"{file.filename}_{job_id}"
+    new_filename = f"{job_id}_{file.filename}"
 
     file_path = os.path.join(UPLOAD_DIR, new_filename)
     # os.path.join(): Safely combines the folder name and the filename.
@@ -45,6 +49,11 @@ async def upload_audio(
     with open(file_path, "wb") as audio_file:
         shutil.copyfileobj(file.file, audio_file)
         # we copy the incoming file into our folder
+
+    new_job = ProcessJob(job_id=job_id, filename=new_filename)
+    db.add(new_job)
+    await db.commit()
+    await db.refresh(new_job)
 
     return FileUpload(
         job_id=job_id,
