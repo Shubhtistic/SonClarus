@@ -1,10 +1,25 @@
 from fastapi import FastAPI
-from app.api_routes import routers
+from app.api_routes import routers, ingest, job_status
 from scalar_fastapi import get_scalar_api_reference
 
-app = FastAPI()
+from app.db.db_models import ProcessJob
+from app.db.database_session import engine
 
-app.include_router(routers.route)
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as connection:
+        await connection.run_sync(ProcessJob.metadata.create_all)
+    yield
+
+
+app = FastAPI(title="SonClarus Api", lifespan=lifespan)
+
+app.include_router(routers.router, tags=["Health Check"])
+app.include_router(ingest.router, tags=["Ingestion"])
+app.include_router(job_status.router, tags=["Job Status"])
 
 
 @app.get("/scalar")
