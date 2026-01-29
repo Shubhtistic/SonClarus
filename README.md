@@ -78,7 +78,6 @@ Sonclarus is built with precision by:
 
 * **Shubham Pawar** - *Core Developer*
 * **Mihir Revaskar** - *Core Developer*
-* **Ishana Chandra** - *Core Developer*
 * **Paramjyot Singh** - *Core Developer*
 
 ---
