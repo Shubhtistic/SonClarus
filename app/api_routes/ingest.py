@@ -19,6 +19,8 @@ from uuid import uuid4
 from app.schemas.file_upload import FileUpload
 from app.config import settings
 
+from app.celery_app import process_audio_file
+
 
 UPLOAD_DIR = settings.FILE_UPLOAD_PATH
 
@@ -54,6 +56,8 @@ async def upload_audio(
     db.add(new_job)
     await db.commit()
     await db.refresh(new_job)
+
+    process_audio_file.delay(job_id, file_path)
 
     return FileUpload(
         job_id=job_id,

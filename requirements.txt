@@ -1,0 +1,17 @@
+scalar-fastapi
+fastapi[all]
+uvicorn
+python-multipart
+pydantic
+pydantic-settings
+
+sqlmodel
+asyncpg
+sqlalchemy
+psycopg2-binary
+
+celery[redis]
+redis
+
+python-dotenv
+requests
