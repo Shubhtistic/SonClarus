@@ -16,14 +16,14 @@
 
 ---
 
-## 🌊 The Mission
+## The Mission
 In high-stakes intelligence analysis, clarity is everything. Analysts often face **"Data Overload"**—hundreds of hours of noisy recordings where overlapping voices (cocktail party effect) make manual review impossible.
 
 **Sonclarus** acts as a high-speed triage engine. It employs a **Stateful/Stateless Hybrid Model** to ingest raw audio, clean it using Deep Learning, separate speakers into distinct tracks, and index the content—all without incurring cloud infrastructure costs.
 
 ---
 
-## 🧠 Core Intelligence
+## Core Intelligence
 
 | Module | Function | Technology |
 | :--- | :--- | :--- |
@@ -34,7 +34,7 @@ In high-stakes intelligence analysis, clarity is everything. Analysts often face
 
 ---
 
-## 🏗 Hybrid Cloud Architecture
+## Hybrid Cloud Architecture
 
 Sonclarus utilizes a **Decoupled Architecture** to bypass the RAM limitations of the AWS Free Tier (`t3.micro`). We split the system into **The Manager** (Stateful) and **The Specialists** (Stateless).
 
@@ -49,7 +49,7 @@ Sonclarus utilizes a **Decoupled Architecture** to bypass the RAM limitations of
 
 ---
 
-## 💰 The Zero-Cost Strategy
+## The Zero-Cost Strategy
 How Sonclarus delivers military-grade results on **$0.00 infrastructure**.
 
 | Service | Role | Free Tier Limit | Optimization Strategy |
@@ -61,7 +61,7 @@ How Sonclarus delivers military-grade results on **$0.00 infrastructure**.
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 * **Backend:** Python 3.10, FastAPI, Uvicorn
 * **Orchestration:** Celery, Redis
@@ -72,17 +72,16 @@ How Sonclarus delivers military-grade results on **$0.00 infrastructure**.
 
 ---
 
-## 👥 The Team
+## The Team
 
 Sonclarus is built with precision by:
 
 * **Shubham Pawar** - *Core Developer*
 * **Mihir Revaskar** - *Core Developer*
-* **Paramjyot Singh** - *Core Developer*
 
 ---
 
-## 📜 Citation
+## Citation
 
 If you use Sonclarus in your research, please cite the team:
 
