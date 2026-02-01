@@ -1,9 +1,8 @@
 # this endpoints takes the files and checks if it an valid wav file
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, UploadFile, File, HTTPException, status
 from app.db.db_models import ProcessJob
-from app.db.database_session import get_db_session
+from app.dependancies.db_dependancy import DbSessionDep
 
 import shutil
 # shutil stand for shell utilities and its used for heavy tasks with files, like
@@ -34,7 +33,7 @@ router = APIRouter()
 
 @router.post("/uploads", response_model=FileUpload)
 async def upload_audio(
-    file: UploadFile = File(...), db: AsyncSession = Depends(get_db_session)
+    db: DbSessionDep, file: UploadFile = File(...)
 ):  ### ... means this endpoint cant be hit without an file
     if not file.filename.endswith(".wav"):
         raise HTTPException(
