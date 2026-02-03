@@ -22,6 +22,8 @@ class User(SQLModel, table=True):
     hashed_password: str
     full_name: str = Field(default=None)
 
+    is_active: bool = Field(default=True)
+
     storage_limit: int = Field(default=104_857_600)  # 100 MB = 104,857,600 bytes
     storage_used: int = Field(default=0)
 
