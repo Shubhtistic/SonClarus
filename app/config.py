@@ -14,6 +14,11 @@ class Settings(B):
 
     REDIS_URL: str
 
+    # jwt related
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
+
     class Config:
         env_file = ".env"
 
