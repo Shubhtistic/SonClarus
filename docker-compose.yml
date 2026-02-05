@@ -2,10 +2,7 @@ services:
   # database
   db:
     image: postgres:15-alpine
-    restart: always
     volumes:
-      # Use a "Volume" to save data permanently.
-      # Even if you delete the container, 'postgres_data' keeps your users.
       - postgres_data:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=postgres
@@ -13,41 +10,59 @@ services:
       - POSTGRES_DB=sonclarus_db
     ports:
       - "5432:5432"
+    # healthcheck for Postgres
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
 
-  # redis db
+  # redis
   redis:
     image: redis:alpine
-    restart: always
     ports:
       - "6379:6379"
+    # Redis needs a healthcheck too
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
 
-  # fastapi
+  # fastapi app
   web:
-    build: . # build using our dockerfile
+    build: .
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
-      - .:/app # sync laptop code to container
-      - ./uploads:/app/uploads
+      - .:/app
     ports:
-      - "8000:8000" # Open port 8000
-    depends_on:
-      - db
-      - redis
+      - "8000:8000"
     env_file:
       - .env
+    # DEPENDS_ON: The strict rule
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: on-failure
 
-  # redis celery worker
+  # celery worker
   worker:
-    build: . # Use the same Dockerfile
-    command: celery -A app.celery_app worker --loglevel=info
+    build: .
+    command: celery -A app.celery_app.celery_worker worker --loglevel=info
     volumes:
-      - .:/app # mirror the code 
-      - ./uploads:/app/uploads
-    depends_on:
-      - db
-      - redis
+      - .:/app
     env_file:
       - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    restart: on-failure
 
 volumes:
   postgres_data:
