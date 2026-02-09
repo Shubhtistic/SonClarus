@@ -2,7 +2,8 @@
 
 import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException, status
-from app.db.db_models import Job
+
+from app.db.db_models import Job, JobStatus
 from app.dependancies.db_dependancy import DbSessionDep
 
 import shutil
@@ -19,10 +20,11 @@ import os
 from app.schemas.file_upload import FileUpload
 from app.config import settings
 
-from app.celery_app import process_audio_file
+from celery import Celery
 
 from app.dependancies.auth import CurrentUserDep
 
+celery_client = Celery("worker", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
 
 UPLOAD_DIR = settings.FILE_UPLOAD_PATH
 
@@ -44,24 +46,35 @@ async def upload_audio(
             detail="The provided File is Invalid.\nFile should be an audio file with '.wav' format",
         )
 
-    file_extension = file.filename.split(".")[-1]
-    new_filename = f"{uuid.uuid4()}.{file_extension}"
+    job_id = uuid.uuid4()
 
-    file_path = os.path.join(UPLOAD_DIR, new_filename)
+    # Create a unique folder for this job so output files (PDFs) stay organized
+    job_folder = os.path.join(UPLOAD_DIR, str(job_id))
+    os.makedirs(job_folder, exist_ok=True)
+
     # os.path.join(): Safely combines the folder name and the filename.
+    file_path = os.path.join(job_folder, file.filename)
+
     try:
         with open(file_path, "wb") as audio_file:
             shutil.copyfileobj(file.file, audio_file)
             # we copy the incoming file into our folder
     except Exception as e:
+        shutil.rmtree(job_folder)  # Clean up if failed
         raise HTTPException(status_code=500, detail=f"Could not save file: {str(e)}")
 
-    new_job = Job(filename=file.filename, filepath=file_path, user_id=current_user.id)
+    new_job = Job(
+        id=job_id,
+        filename=file.filename,
+        filepath=file_path,
+        user_id=current_user.id,
+        status=JobStatus.PENDING,
+    )
     db.add(new_job)
     await db.commit()
     await db.refresh(new_job)
 
-    task = process_audio_file.delay(str(new_job.id))
+    task = celery_client.send_task("process_forensics", args=[str(new_job.id)])
 
     return {
         "message": "Upload successful",
