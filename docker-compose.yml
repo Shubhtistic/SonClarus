@@ -9,7 +9,7 @@ services:
       - POSTGRES_PASSWORD=sonclarus123
       - POSTGRES_DB=sonclarus_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     # healthcheck for Postgres
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
@@ -22,7 +22,7 @@ services:
   redis:
     image: redis:alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     # Redis needs a healthcheck too
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
@@ -52,7 +52,7 @@ services:
   # celery worker
   worker:
     build: .
-    command: celery -A app.celery_app.celery_worker worker --loglevel=info
+    command: celery -A app.celery_app.celery_app worker --loglevel=info
     volumes:
       - .:/app
     env_file:

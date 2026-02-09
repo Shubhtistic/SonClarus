@@ -1,7 +1,9 @@
 # this endpoints takes the files and checks if it an valid wav file
 
+import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException, status
-from app.db.db_models import ProcessJob
+
+from app.db.db_models import Job, JobStatus
 from app.dependancies.db_dependancy import DbSessionDep
 
 import shutil
@@ -11,15 +13,18 @@ import shutil
 import os
 # used to talk with the computer/our device create files or folders
 
-from uuid import uuid4
+# from uuid import uuid4
 
 # uuid4 -> unique id with veruy low chance of replication
 
 from app.schemas.file_upload import FileUpload
 from app.config import settings
 
-from app.celery_app import process_audio_file
+from celery import Celery
 
+from app.dependancies.auth import CurrentUserDep
+
+celery_client = Celery("worker", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
 
 UPLOAD_DIR = settings.FILE_UPLOAD_PATH
 
@@ -33,34 +38,47 @@ router = APIRouter()
 
 @router.post("/uploads", response_model=FileUpload)
 async def upload_audio(
-    db: DbSessionDep, file: UploadFile = File(...)
+    current_user: CurrentUserDep, db: DbSessionDep, file: UploadFile = File(...)
 ):  ### ... means this endpoint cant be hit without an file
     if not file.filename.endswith(".wav"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="The provided File is Invalid.\nFile should be an audio file with '.wav' format",
         )
-    job_id = str(uuid4())[:16]
 
-    new_filename = f"{job_id}_{file.filename}"
+    job_id = uuid.uuid4()
 
-    file_path = os.path.join(UPLOAD_DIR, new_filename)
+    # Create a unique folder for this job so output files (PDFs) stay organized
+    job_folder = os.path.join(UPLOAD_DIR, str(job_id))
+    os.makedirs(job_folder, exist_ok=True)
+
     # os.path.join(): Safely combines the folder name and the filename.
+    file_path = os.path.join(job_folder, file.filename)
 
-    with open(file_path, "wb") as audio_file:
-        shutil.copyfileobj(file.file, audio_file)
-        # we copy the incoming file into our folder
+    try:
+        with open(file_path, "wb") as audio_file:
+            shutil.copyfileobj(file.file, audio_file)
+            # we copy the incoming file into our folder
+    except Exception as e:
+        shutil.rmtree(job_folder)  # Clean up if failed
+        raise HTTPException(status_code=500, detail=f"Could not save file: {str(e)}")
 
-    new_job = ProcessJob(job_id=job_id, filename=new_filename)
+    new_job = Job(
+        id=job_id,
+        filename=file.filename,
+        filepath=file_path,
+        user_id=current_user.id,
+        status=JobStatus.PENDING,
+    )
     db.add(new_job)
     await db.commit()
     await db.refresh(new_job)
 
-    process_audio_file.delay(job_id, file_path)
+    task = celery_client.send_task("process_forensics", args=[str(new_job.id)])
 
-    return FileUpload(
-        job_id=job_id,
-        status="PENDING",
-        filename=new_filename,
-        message="File ingested successfully.",
-    )
+    return {
+        "message": "Upload successful",
+        "job_id": new_job.id,
+        "status": "pending",
+        "task_id": task.id,
+    }

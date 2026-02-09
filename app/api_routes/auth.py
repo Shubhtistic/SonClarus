@@ -12,7 +12,14 @@ from app.config import settings
 from app.schemas.token_schema import Token
 from fastapi.security import OAuth2PasswordRequestForm
 
+from app.dependancies.auth import CurrentUserDep
+
 router = APIRouter()
+
+
+@router.get("/me", response_model=UserRead)
+async def users_me(current_user: CurrentUserDep):
+    return current_user
 
 
 @router.post("/register", response_model=UserRead)
