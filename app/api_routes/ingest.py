@@ -79,7 +79,8 @@ async def upload_audio(
 
     return {
         "message": "Upload successful",
-        "job_id": new_job.id,
+        "job_id": str(new_job.id),   
         "status": "pending",
         "task_id": task.id,
+        "filename": file.filename     
     }
