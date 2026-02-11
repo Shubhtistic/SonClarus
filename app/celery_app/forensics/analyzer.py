@@ -7,7 +7,7 @@ import numpy as np
 def generate_waveform_image(file_path: str, output_path: str):
     # why we did sr=None as librosa shrinks sample rate of file
     # we dont wan to shrik sample rate wo de sr=None
-    y, sr = librosa.load(file_path, sr=None)
+    y, sr = librosa.load(file_path, sr=None, mono=False)
 
     # Create a wide canvas (10x4 inches)
     plt.figure(figsize=(10, 4))
