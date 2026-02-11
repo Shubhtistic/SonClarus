@@ -49,7 +49,8 @@ async def upload_audio(
     job_id = uuid.uuid4()
 
     # Create a unique folder for this job so output files (PDFs) stay organized
-    job_folder = os.path.join(UPLOAD_DIR, str(job_id))
+    # UPDATED: Added str(current_user.id) to partition by user
+    job_folder = os.path.join(UPLOAD_DIR, str(current_user.id), str(job_id))
     os.makedirs(job_folder, exist_ok=True)
 
     # os.path.join(): Safely combines the folder name and the filename.
