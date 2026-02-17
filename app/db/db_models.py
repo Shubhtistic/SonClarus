@@ -103,3 +103,4 @@ class RefreshToken(SQLModel, table=True):
     )
 
     user: Optional[User] = Relationship(back_populates="refresh_tokens")
+    revoked: bool = Field(default=False)
