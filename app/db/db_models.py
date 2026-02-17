@@ -24,7 +24,7 @@ class User(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     email: EmailStr = Field(unique=True, index=True)
     hashed_password: str
-    full_name: str = Field(default=None)
+    full_name: Optional[str] = Field(default=None)
 
     is_active: bool = Field(default=True)
 
@@ -37,6 +37,8 @@ class User(SQLModel, table=True):
     )
     # Relationship: A User has a list of Jobs
     jobs: list["Job"] = Relationship(back_populates="user")
+
+    refresh_tokens: list["RefreshToken"] = Relationship(back_populates="user")
 
 
 class Job(SQLModel, table=True):
@@ -84,3 +86,21 @@ class JobArtifact(SQLModel, table=True):
 
     job_id: uuid.UUID = Field(foreign_key="job.id")
     job: Optional[Job] = Relationship(back_populates="artifacts")
+
+
+class RefreshToken(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+
+    user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
+    hashed_token: str
+
+    expires_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+    user: Optional[User] = Relationship(back_populates="refresh_tokens")
+    revoked: bool = Field(default=False)

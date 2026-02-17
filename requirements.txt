@@ -7,6 +7,14 @@ pydantic-settings
 bcrypt==4.0.1
 passlib[bcrypt]
 python-jose[cryptography]
+soundfile
+numpy
+librosa
+matplotlib
+scipy
+fpdf2
+psycopg2-binary # sync db driver
+alembic # for db migrations
 
 sqlmodel
 asyncpg
