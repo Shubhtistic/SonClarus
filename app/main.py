@@ -3,16 +3,11 @@ from app.api_routes import ingest, job_status, auth
 from scalar_fastapi import get_scalar_api_reference
 
 
-from app.db.db_models import SQLModel
-from app.db.database_session import engine
-
 from contextlib import asynccontextmanager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as connection:
-        await connection.run_sync(SQLModel.metadata.create_all)
     yield
 
 
