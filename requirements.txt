@@ -14,6 +14,7 @@ matplotlib
 scipy
 fpdf2
 psycopg2-binary # sync db driver
+alembic # for db migrations
 
 sqlmodel
 asyncpg
