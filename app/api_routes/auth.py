@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, status, HTTPException, Depends
+from app.dependancies.redis_blacklist import add_jti_to_blacklist
 from app.schemas.user_schema import RegisterUser, UserRead
 
 from app.dependancies.db_dependancy import DbSessionDep  # async db session
@@ -7,8 +8,8 @@ from app.schemas.user_auth import RefreshRequest, LogoutRequest
 from app.db.db_models import User, RefreshToken  # user table defn
 
 
-from app.core.security import hash_password, verify_password, create_token
-from sqlalchemy.future import select
+from app.core.security import decode_token, hash_password, verify_password, create_token
+from sqlalchemy import select, delete
 from app.config import settings
 from app.schemas.token_schema import Token
 from fastapi.security import OAuth2PasswordRequestForm
@@ -85,7 +86,7 @@ async def login(db: DbSessionDep, form_data: OAuth2PasswordRequestForm = Depends
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     # 'sub' (Subject) is the standard field for the user ID/Email in a token
-    token = create_token(data={"sub": user.email}, expires_in=access_token_expires)
+    token = create_token(data={"sub": str(user.id)}, expires_in=access_token_expires)
 
     raw_refresh_token = create_refresh_token()
     hashed_refresh_token = hash_refresh_token(raw_refresh_token)
@@ -107,7 +108,7 @@ async def login(db: DbSessionDep, form_data: OAuth2PasswordRequestForm = Depends
 
 
 @router.post("/refresh")
-async def refresh_token(
+async def refresh(
     db: DbSessionDep,
     request: RefreshRequest,
 ):
@@ -151,7 +152,7 @@ async def refresh_token(
     # Generate new tokens
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     new_access_token = create_token(
-        data={"sub": user.email}, expires_in=access_token_expires
+        data={"sub": str(user.id)}, expires_in=access_token_expires
     )
 
     raw_refresh_token = create_refresh_token()
@@ -180,14 +181,21 @@ async def logout(
     db: DbSessionDep,
     request: LogoutRequest,
 ):
-    hashed_token = hash_refresh_token(request.refresh_token)
+    refresh_token = request.refresh_token
+    access_token = request.access_token
+    payload = decode_token(access_token)
+    # if any error internally raises 401
+    exp = payload.get("exp")  # unix timestamp
+    jti = payload.get("jti")
+    await add_jti_to_blacklist(jti=jti, exp=exp)
 
-    query = select(RefreshToken).where(RefreshToken.hashed_token == hashed_token)
-    result = await db.execute(query)
-    token_obj = result.scalar_one_or_none()
+    # use a single query to delete the refresh token, if it exists gets deleted
 
-    if token_obj:
-        await db.delete(token_obj)
-        await db.commit()
+    hashed_refresh_token = hash_refresh_token(refresh_token)
 
-    return {"message": "Logged out successfully"}
+    del_qry = delete(RefreshToken).where(
+        RefreshToken.hashed_token == hashed_refresh_token
+    )
+    await db.execute(del_qry)
+    await db.commit()
+    return {"message": "You are logged out Successfully"}
