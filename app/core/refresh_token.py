@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid_utils import uuid7
 import hashlib
 
 
@@ -7,7 +7,7 @@ def create_refresh_token() -> str:
     """creates a raw valued uuid refresh token,
     this is sent to user"""
 
-    return str(uuid4())
+    return str(uuid7())
 
 
 def get_refresh_token_expiry(num_days: int = 7):

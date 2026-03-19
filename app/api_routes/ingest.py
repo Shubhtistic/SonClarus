@@ -1,21 +1,21 @@
 # this endpoints takes the files and checks if it an valid wav file
 
-import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException, status
+from uuid_utils import uuid7
 
 from app.db.db_models import Job, JobStatus
 from app.dependancies.db_dependancy import DbSessionDep
 
 import shutil
+
 # shutil stand for shell utilities and its used for heavy tasks with files, like
 # copying them , moving them, etc.
 
 import os
+
 # used to talk with the computer/our device create files or folders
 
-# from uuid import uuid4
-
-# uuid4 -> unique id with veruy low chance of replication
+# uuid7 -> unique id with very low chance of replication
 
 from app.schemas.file_upload import FileUpload
 from app.config import settings
@@ -46,7 +46,7 @@ async def upload_audio(
             detail="The provided File is Invalid.\nFile should be an audio file with '.wav' format",
         )
 
-    job_id = uuid.uuid4()
+    job_id = uuid7()
 
     # Create a unique folder for this job so output files (PDFs) stay organized
     # UPDATED: Added str(current_user.id) to partition by user
@@ -79,8 +79,8 @@ async def upload_audio(
 
     return {
         "message": "Upload successful",
-        "job_id": str(new_job.id),   
+        "job_id": str(new_job.id),
         "status": "pending",
         "task_id": task.id,
-        "filename": file.filename     
+        "filename": file.filename,
     }

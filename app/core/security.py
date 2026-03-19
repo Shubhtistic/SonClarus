@@ -1,5 +1,5 @@
 from datetime import timedelta, datetime, timezone
-from uuid import uuid4
+from uuid_utils import uuid7
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from app.config import settings
@@ -29,7 +29,7 @@ def create_token(data: dict, expires_in: timedelta):
         )
 
     to_encode.update({"exp": expire})  # exp is a special keyword that browsers look at
-    to_encode["jti"] = str(uuid4())
+    to_encode["jti"] = str(uuid7())
     # jwt.encode does three things:
     #   turns the json data into a string
     # signs it using the secret_key
