@@ -1,61 +1,92 @@
+
+# postgres and redis have no dependancies to be fullfiled 
+# so postgres and redis will start instantly building
+# but alembic depends on postgres, so it will start after postgres
+# and worker and fastapi depends on alembic, so they will start after alembic exits with code 0
 services:
-  db:
-    image: postgres:15-alpine
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=sonclarus123
-      - POSTGRES_DB=sonclarus_db
+  postgres:
+    image: postgres:16-alpine
     ports:
       - "5433:5432"
+    environment:
+    # these are official variables defined in postgres image so we pass them manually
+      - POSTGRES_USER: ${POSTGRES_USER}
+      - POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      - POSTGRES_DB: ${POSTGRES_DB}
+      # these will also create the the database that we have defined
+    volumes:
+      - sonclarus_postgres_db:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
-      interval: 5s
-      timeout: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -p ${POSTGRES_PORT}"]
+      interval: 30s
+      timeout: 30s
       retries: 5
-    restart: no
 
+    # redis image
   redis:
-    image: redis:alpine
+    image: redis:8-alpine
     ports:
       - "6380:6379"
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: no
+    deploy:
+      resources:
+        reservations:
+          memory: 32m
+        limits:
+          memory: 128m
+          cpus: '0.25'
 
-  web:
+  # alembic
+  alembic: 
+    build: .
+    command: alembic upgrade head
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  fastapi:
     build: .
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    volumes:
-      - .:/app
     ports:
-      - "8000:8000"
-    env_file:
-      - .env
+    - '8000:8000'
+    env_file: .env
+    entrypoint: ['']
+    volumes:
+    - ./app:/sonclarus/app
+    deploy:
+      resources:
+        reservations:
+          memory: 128m
+        limits:
+          memory: 512m
+          cpus: '0.5'
     depends_on:
-      db:
-        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
       redis:
-        condition: service_healthy
-    restart: on-failure
+        condition: service_started
+      
 
   worker:
     build: .
-    command: celery -A app.celery_app.worker.celery_app worker --loglevel=info
+    command: arq app.worker.WorkerSettings
+    entrypoint: ['']
+    env_file: .env
     volumes:
-      - .:/app
-    env_file:
-      - .env
+    - ./app:/sonclarus/app
     depends_on:
+      alembic:
+        condition: service_completed_successfully
       redis:
-        condition: service_healthy
-      db:
-        condition: service_healthy
-    restart: on-failure
+        condition: service_started
+    deploy:
+      resources:
+        reservations:
+          memory: 32m
+        limits:
+          memory: 512m
+          cpus: '0.5'
+
 
 volumes:
-  postgres_data:
+  sonclarus_postgres_db
