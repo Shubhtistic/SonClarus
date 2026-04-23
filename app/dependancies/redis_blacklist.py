@@ -13,7 +13,7 @@ async def add_jti_to_blacklist(jti: str, exp: int):
         return
     await redis_client.set(f"jti:{jti}", "1", ex=remaining_time + 1)
     # key -> jti:actual_jti
-    # value -> just for existenec
+    # value -> just for existence
 
 
 async def check_blacklisted_jti(jti: str) -> bool:
