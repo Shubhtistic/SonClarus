@@ -3,8 +3,5 @@
 from pydantic import BaseModel
 
 
-class FileUpload(BaseModel):
-    job_id: str
-    status: str
+class UploadRequest(BaseModel):
     filename: str
-    message: str

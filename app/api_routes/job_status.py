@@ -1,16 +1,16 @@
 # This endpoint check the status for our job in the database
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from app.dependancies.db_dependancy import DbSessionDep
 from sqlalchemy.future import select
 from app.db.db_models import Job
 
-from app.dependancies.auth import CurrentUserDep
-
+from app.dependancies.auth import CurrentVerifiedUserDep
+from app.dependancies.rate_limit import check_limit
 router = APIRouter()
 
 
-@router.get("/jobs/{job_id}")
-async def get_job_status(job_id: str, db: DbSessionDep, current_user: CurrentUserDep):
+@router.get("/jobs/{job_id}", dependencies=[Depends(check_limit(15))])
+async def get_job_status(job_id: str, db: DbSessionDep, current_user: CurrentVerifiedUserDep):
 
     sql_query = select(Job).where(job_id == Job.id)
 

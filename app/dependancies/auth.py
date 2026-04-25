@@ -3,7 +3,6 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from app.dependancies.db_dependancy import DbSessionDep
 
-from jose import jwt, JWTError
 from sqlalchemy.future import select
 
 from app.db.db_models import User
@@ -18,8 +17,7 @@ from app.dependancies.redis_blacklist import check_blacklisted_jti
 oauth2scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
 
-async def get_current_user( token: str = Depends(oauth2scheme)) -> str:
-
+async def get_current_user(token: str = Depends(oauth2scheme)) -> str:
     """Verifies the jwt and checks jti blacklist, Does not hit db"""
 
     # lets try to decode the jwt
@@ -33,33 +31,34 @@ async def get_current_user( token: str = Depends(oauth2scheme)) -> str:
         )
 
     # lets check the jti blacklist
-    blacklisted= await check_blacklisted_jti(jti=data.get("jti"),exp=data.get("exp"))
+    blacklisted = await check_blacklisted_jti(jti=data.get("jti"), exp=data.get("exp"))
 
     if blacklisted:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="This jwt is invalid / banned"
         )
-    
+
     return user_id
 
 
-async def get_current_verified_user( db:DbSessionDep, user_id:str=Depends(get_current_user)) -> str:
+async def get_current_verified_user(
+    db: DbSessionDep, user_id: str = Depends(get_current_user)
+) -> str:
 
-    query=select(User.id, User.is_active).where(User.id==user_id)
+    query = select(User.id, User.is_active).where(User.id == user_id)
     user = (await db.execute(query)).one_or_none()
 
     if user is None:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User Does not exit"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User Does not exit"
         )
-    
+
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not Allowed")
-        
-    return str(user.id)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User not Allowed"
+        )
 
-
+    return user
 
 
 CurrentUserDep = Annotated[str, Depends(get_current_user)]

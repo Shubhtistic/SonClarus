@@ -1,86 +1,114 @@
 # this endpoints takes the files and checks if it an valid wav file
+from fastapi import APIRouter, Depends, HTTPException, status
+from app.dependancies.auth import CurrentVerifiedUserDep
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
-from uuid_utils import uuid7
-
+from uuid_utils import uuid7  # uuid7 -> unique id with almost no chance of replication
 from app.db.db_models import Job, JobStatus
 from app.dependancies.db_dependancy import DbSessionDep
-
-import shutil
-
-# shutil stand for shell utilities and its used for heavy tasks with files, like
-# copying them , moving them, etc.
-
-import os
-
-# used to talk with the computer/our device create files or folders
-
-# uuid7 -> unique id with very low chance of replication
-
-from app.schemas.file_upload import FileUpload
 from app.config import settings
+from app.schemas.file_upload import UploadRequest
+from sqlalchemy import select, delete, update
+from app.dependancies.arq_redis import get_redis_pool
 
-from celery import Celery
+# rate limiter
+from app.dependancies.rate_limit import check_limit
 
-from app.dependancies.auth import CurrentUserDep
-
-celery_client = Celery("worker", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
-
-UPLOAD_DIR = settings.FILE_UPLOAD_PATH
-
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-# os tells the system to make an dir called as 'Upload_Dir' and
-# then with exist_ok=true is it already present we ignore it
+# s3 function
+from app.core.aws_s3_utils import generate_presigned_post, verify_s3_upload
 
 
 router = APIRouter()
 
 
-@router.post("/uploads", response_model=FileUpload)
+@router.post("/uploads/request", dependencies=[Depends(check_limit(4))])
 async def upload_audio(
-    current_user: CurrentUserDep, db: DbSessionDep, file: UploadFile = File(...)
-):  ### ... means this endpoint cant be hit without an file
-    if not file.filename.endswith(".wav"):
+    current_user: CurrentVerifiedUserDep, db: DbSessionDep, request: UploadRequest
+):
+    if not request.filename.endswith(".wav"):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The provided File is Invalid.\nFile should be an audio file with '.wav' format",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid file format, Only .wav files are Allowed.",
         )
 
-    job_id = uuid7()
+    job_id = str(uuid7())
+    user_id = str(current_user.id)
 
-    # Create a unique folder for this job so output files (PDFs) stay organized
-    # UPDATED: Added str(current_user.id) to partition by user
-    job_folder = os.path.join(UPLOAD_DIR, str(current_user.id), str(job_id))
-    os.makedirs(job_folder, exist_ok=True)
+    presigned_data = await generate_presigned_post(
+        user_id=user_id, job_id=job_id, filename=request.filename
+    )
 
-    # os.path.join(): Safely combines the folder name and the filename.
-    file_path = os.path.join(job_folder, file.filename)
+    # the path in which the file will be uploaded
+    s3_location = f"s3://{settings.AWS_BUCKET_NAME}/{user_id}/{job_id}/original/{request.filename}"
 
-    try:
-        with open(file_path, "wb") as audio_file:
-            shutil.copyfileobj(file.file, audio_file)
-            # we copy the incoming file into our folder
-    except Exception as e:
-        shutil.rmtree(job_folder)  # Clean up if failed
-        raise HTTPException(status_code=500, detail=f"Could not save file: {str(e)}")
-
+    # record the job as pending
     new_job = Job(
         id=job_id,
-        filename=file.filename,
-        filepath=file_path,
+        filename=request.filename,
+        filepath=s3_location,
         user_id=current_user.id,
         status=JobStatus.PENDING,
     )
+
     db.add(new_job)
     await db.commit()
-    await db.refresh(new_job)
 
-    task = celery_client.send_task("process_forensics", args=[str(new_job.id)])
+    return {"job_id": job_id, "presigned_post": presigned_data}
+
+
+@router.post("/uploads/confirm/{job_id}", dependencies=[Depends(check_limit(10))])
+async def confirm_upload(
+    job_id: str, db: DbSessionDep, current_user: CurrentVerifiedUserDep
+):
+    user_id = str(current_user.id)
+    # check is job exists
+    qry = select(Job.status, Job.filename).where(
+        Job.user_id == user_id, Job.id == job_id
+    )
+
+    job_res = (await db.execute(qry)).one_or_none()
+
+    if not job_res:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="The file Does not exist"
+        )
+
+    if job_res.status != JobStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="the job is not in pending state",
+        )
+
+    # s3 verification
+    is_uploaded = await verify_s3_upload(
+        user_id=user_id, job_id=job_id, filename=job_res.filename
+    )
+
+    if not is_uploaded:
+        # as file is not found on s3 lets delete the record from db as well
+        qry = delete(Job).where(Job.id == job_id, Job.user_id == user_id)
+        await db.execute(qry)
+        await db.commit()
+
+        # return the error code
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Object Not found, Incomplete User Upload",
+        )
+
+    # the file exists on s3
+    # lets update and add it to processing
+    update_qry = (
+        update(Job)
+        .where(Job.id == job_id, Job.user_id == user_id)
+        .values({Job.status: JobStatus.PROCESSING})
+    )
+    await db.execute(update_qry)
+    await db.commit()
+    arq_pool = await get_redis_pool()
+    await arq_pool.enqueue_job("Process_Forensics", job_id)
 
     return {
-        "message": "Upload successful",
-        "job_id": str(new_job.id),
-        "status": "pending",
-        "task_id": task.id,
-        "filename": file.filename,
+        "message": "Upload confirmed and processing enqueued.",
+        "job_id": job_id,
+        "status": "processing",
     }
