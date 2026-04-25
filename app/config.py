@@ -13,6 +13,7 @@ class Settings(B):
     POSTGRES_DB: str
 
     REDIS_URL: str
+    REDIS_HOST:str
 
     # jwt related
     SECRET_KEY: str
