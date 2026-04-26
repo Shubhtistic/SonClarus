@@ -31,7 +31,7 @@ async def get_current_user(token: str = Depends(oauth2scheme)) -> str:
         )
 
     # lets check the jti blacklist
-    blacklisted = await check_blacklisted_jti(jti=data.get("jti"), exp=data.get("exp"))
+    blacklisted = await check_blacklisted_jti(jti=data.get("jti"))
 
     if blacklisted:
         raise HTTPException(
