@@ -47,6 +47,9 @@ async def upload_audio(
         filepath=s3_location,
         user_id=current_user.id,
         status=JobStatus.PENDING,
+        is_denoise=request.is_denoise,
+        is_separation=request.is_separation,
+        is_transcription=request.is_transcription,
     )
 
     db.add(new_job)
@@ -105,7 +108,7 @@ async def confirm_upload(
     await db.execute(update_qry)
     await db.commit()
     arq_pool = await get_redis_pool()
-    await arq_pool.enqueue_job("Process_Forensics", job_id)
+    await arq_pool.enqueue_job("process_audios_pipeline", job_id)
 
     return {
         "message": "Upload confirmed and processing enqueued.",
