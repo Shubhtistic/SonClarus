@@ -1,14 +1,16 @@
 from fastapi import FastAPI
 from app.api_routes import ingest, job_status, auth
 from scalar_fastapi import get_scalar_api_reference
-
+from app.dependancies.arq_redis import init_redis_pool, close_redis_pool
 
 from contextlib import asynccontextmanager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await init_redis_pool()
     yield
+    await close_redis_pool()
 
 
 app = FastAPI(title="SonClarus Api", lifespan=lifespan)

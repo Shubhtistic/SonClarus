@@ -24,3 +24,4 @@ async def get_redis_pool():
     global redis_pool
     if not redis_pool:
         raise RuntimeError("Redis pool not initialized")
+    return redis_pool
