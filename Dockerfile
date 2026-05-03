@@ -1,27 +1,24 @@
 # we use an lighweight linx os and python3.10
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-# avoid __pycache__
-ENV PYTHONDONTWRITEBYTECODE=1  
-
-# Print logs
-ENV PYTHONUNBUFFERED=1
 
 # install imp packages using apt-get
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
-    ffmpeg \
+    ffmpeg \ 
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # creates a folder called app
-WORKDIR /app
+WORKDIR /sonclarus
 
 # copy requirments file and download everything in it
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # copy all code
-COPY . .
-
+COPY ./app ./app
+COPY ./alembic ./alembic
+COPY alembic.ini .
 RUN mkdir -p uploads
