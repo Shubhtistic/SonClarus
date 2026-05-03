@@ -6,7 +6,7 @@ from uuid_utils import uuid7  # uuid7 -> unique id with almost no chance of repl
 from app.db.db_models import Job, JobStatus
 from app.dependancies.db_dependancy import DbSessionDep
 from app.config import settings
-from app.schemas.file_upload import UploadRequest
+from app.schemas.job_schema import UploadRequest
 from sqlalchemy import select, delete, update
 from app.dependancies.arq_redis import get_redis_pool
 
@@ -15,7 +15,6 @@ from app.dependancies.rate_limit import check_limit
 
 # s3 function
 from app.core.aws_s3_utils import generate_presigned_post, verify_s3_upload
-
 
 router = APIRouter()
 
@@ -37,19 +36,15 @@ async def upload_audio(
         user_id=user_id, job_id=job_id, filename=request.filename
     )
 
-    # the path in which the file will be uploaded
-    s3_location = f"s3://{settings.AWS_BUCKET_NAME}/{user_id}/{job_id}/original/{request.filename}"
+    # Use just the key for provider-agnostic storage
+    s3_key = f"{user_id}/{job_id}/original/{request.filename}"
 
-    # record the job as pending
     new_job = Job(
         id=job_id,
         filename=request.filename,
-        filepath=s3_location,
+        object_key=s3_key,
         user_id=current_user.id,
-        status=JobStatus.PENDING,
-        is_denoise=request.is_denoise,
-        is_separation=request.is_separation,
-        is_transcription=request.is_transcription,
+        status=JobStatus.QUEUED,
     )
 
     db.add(new_job)
@@ -63,7 +58,7 @@ async def confirm_upload(
     job_id: str, db: DbSessionDep, current_user: CurrentVerifiedUserDep
 ):
     user_id = str(current_user.id)
-    # check is job exists
+    # check if job exists
     qry = select(Job.status, Job.filename).where(
         Job.user_id == user_id, Job.id == job_id
     )
@@ -75,10 +70,10 @@ async def confirm_upload(
             status_code=status.HTTP_404_NOT_FOUND, detail="The file Does not exist"
         )
 
-    if job_res.status != JobStatus.PENDING:
+    if job_res.status != JobStatus.QUEUED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="the job is not in pending state",
+            detail="The job is not in queued state",
         )
 
     # s3 verification
@@ -98,20 +93,12 @@ async def confirm_upload(
             detail="Object Not found, Incomplete User Upload",
         )
 
-    # the file exists on s3
-    # lets update and add it to processing
-    update_qry = (
-        update(Job)
-        .where(Job.id == job_id, Job.user_id == user_id)
-        .values({Job.status: JobStatus.PROCESSING})
-    )
-    await db.execute(update_qry)
-    await db.commit()
+    # the file exists on s3. It is already marked QUEUED, so we just hand it to the worker.
     arq_pool = await get_redis_pool()
     await arq_pool.enqueue_job("process_audios_pipeline", job_id)
 
     return {
         "message": "Upload confirmed and processing enqueued.",
         "job_id": job_id,
-        "status": "processing",
+        "status": JobStatus.QUEUED,
     }

@@ -1,5 +1,6 @@
 from typing import Optional
 from sqlmodel import SQLModel, Field, DateTime, Relationship, Column, String
+from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime, timezone
 from uuid import UUID
 from uuid_utils import uuid7
@@ -9,16 +10,13 @@ from enum import Enum
 
 
 class JobStatus(str, Enum):
-    PENDING = "Pending"
-    PROCESSING = "Processing"
-    COMPLETED = "Completed"
-    FAILED = "Failed"
-
-
-class ArtifactType(str, Enum):
-    AUDIO = "audio"
-    REPORT = "pdf"
-    TRANSCRIPT = "text"
+    QUEUED = "queued"
+    DENOISING = "denoising"
+    SEPARATING = "separating"
+    TRANSCRIBING = "transcribing"
+    SUMMARIZING = "summarizing"
+    DONE = "done"
+    FAILED = "failed"
 
 
 class User(SQLModel, table=True):
@@ -46,13 +44,9 @@ class Job(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid7, primary_key=True)
 
     filename: str
-    filepath: str
+    object_key: str
 
-    is_denoise: bool = Field(default=False)
-    is_separation: bool = Field(default=False)
-    is_transcription: bool = Field(default=False)
-
-    status: JobStatus = Field(default=JobStatus.PENDING)
+    status: JobStatus = Field(default=JobStatus.QUEUED)
 
     # The Foreign Key (Link to the Parent)
     user_id: UUID = Field(foreign_key="user.id")
@@ -60,33 +54,15 @@ class Job(SQLModel, table=True):
     # Relationship: A Job belongs to one User
     user: Optional[User] = Relationship(back_populates="jobs")
 
-    # Link to the results
-    artifacts: list["JobArtifact"] = Relationship(back_populates="job")
+    transcript: list[dict] | None = Field(default=None, sa_column=Column(JSONB))
+    summary: str | None = Field(default=None, sa_column=Column(String))
+    action_items: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    error_message: str | None = Field(default=None, sa_column=Column(String))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_type=DateTime(timezone=True),
     )
-
-
-class JobArtifact(SQLModel, table=True):
-    """Generated artifacts"""
-
-    id: UUID = Field(default_factory=uuid7, primary_key=True)
-
-    # 1. Description
-    type: ArtifactType
-    label: str
-
-    # 2. Data
-    file_path: str | None = None  # Path to disk
-    file_hash: str | None = None  # SHA-256 hash
-    transcript_text: str | None = Field(
-        default=None, sa_column=Column(String, nullable=True)
-    )
-
-    job_id: UUID = Field(foreign_key="job.id")
-    job: Optional[Job] = Relationship(back_populates="artifacts")
 
 
 class RefreshToken(SQLModel, table=True):
