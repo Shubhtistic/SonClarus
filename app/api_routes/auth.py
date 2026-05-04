@@ -23,11 +23,6 @@ from app.dependancies.auth import CurrentUserDep
 router = APIRouter()
 
 
-@router.get("/me", response_model=UserRead)
-async def users_me(current_user: CurrentUserDep):
-    return current_user
-
-
 @router.post("/register", response_model=UserRead)
 async def register_user(user_data: RegisterUser, db: DbSessionDep):
     # lets first run a query to see if the email already exists
