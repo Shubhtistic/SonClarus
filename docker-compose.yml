@@ -1,30 +1,24 @@
-
-# postgres and redis have no dependancies to be fullfiled 
-# so postgres and redis will start instantly building
-# but alembic depends on postgres, so it will start after postgres
-# and worker and fastapi depends on alembic, so they will start after alembic exits with code 0
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: sonclarus_db
     ports:
       - "5433:5432"
     environment:
-    # these are official variables defined in postgres image so we pass them manually
-      - POSTGRES_USER: ${POSTGRES_USER}
-      - POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      - POSTGRES_DB: ${POSTGRES_DB}
-      # these will also create the the database that we have defined
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - sonclarus_postgres_db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -p ${POSTGRES_PORT}"]
-      interval: 30s
-      timeout: 30s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
       retries: 5
 
-    # redis image
   redis:
     image: redis:8-alpine
+    container_name: sonclarus_redis
     ports:
       - "6380:6379"
     deploy:
@@ -35,9 +29,13 @@ services:
           memory: 128m
           cpus: '0.25'
 
-  # alembic
   alembic: 
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.api  
+    volumes:
+      - ./alembic:/sonclarus/alembic 
+      - ./app:/sonclarus/app
     command: alembic upgrade head
     env_file: .env
     depends_on:
@@ -45,14 +43,18 @@ services:
         condition: service_healthy
 
   fastapi:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: sonclarus_api
+    # Overriding command for development reload
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
-    - '8000:8000'
+      - '8000:8000'
     env_file: .env
-    entrypoint: ['']
     volumes:
-    - ./app:/sonclarus/app
+      - ./app:/sonclarus/app
+      - ./alembic:/sonclarus/alembic
     deploy:
       resources:
         reservations:
@@ -65,15 +67,17 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_started
-      
 
   worker:
-    build: .
-    command: arq app.worker.WorkerSettings
-    entrypoint: ['']
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: sonclarus_worker
     env_file: .env
     volumes:
-    - ./app:/sonclarus/app
+      - ./worker:/sonclarus/worker
+      - ./app:/sonclarus/app
+      - ~/uploads:/uploads 
     depends_on:
       alembic:
         condition: service_completed_successfully
@@ -82,11 +86,14 @@ services:
     deploy:
       resources:
         reservations:
-          memory: 32m
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+          memory: 2gb    # ML models need more headroom than API
         limits:
-          memory: 512m
-          cpus: '0.5'
-
+          memory: 4gb    # Match your RTX 3050 VRAM limit for safety
+          cpus: '2.0'
 
 volumes:
-  sonclarus_postgres_db
+  sonclarus_postgres_db:

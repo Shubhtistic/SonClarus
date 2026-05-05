@@ -11,6 +11,10 @@ processed/
 *.pt
 *.pth
 
+#ruff related info
+.ruff_cache
+.ruff_cache/
+
 # Python Junk (Generated automatically)
 __pycache__/
 *.pyc

@@ -75,9 +75,10 @@ orjson==3.11.5
 packaging==23.2
 passlib==1.7.4
 propcache==0.4.1
-protobuf==7.34.1
+protobuf>=3.20.2,<6.0.0
 psycopg2-binary==2.9.11
 pyasn1==0.6.3
+google-generativeai==0.8.3
 pycparser==3.0
 pydantic==2.12.5
 pydantic-extra-types==2.11.0
@@ -129,4 +130,3 @@ uvloop==0.22.1
 watchfiles==1.1.1
 wrapt==1.17.3
 yarl==1.23.0
-google-generativeai==0.8.3
