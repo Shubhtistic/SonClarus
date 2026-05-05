@@ -1,75 +1,29 @@
-## only change three things
-
-# 1. import all models and import SQLModel
-# and configure target_metadata = None -> target_metadata = SQLModel.metadata
-
-# 2. in run_migrations_offline()
-# remove this line -> url = config.get_main_option("sqlalchemy.url")
-# and directly add db_url variable in this  context.configure(
-#         url=settings.DB_URL,
-#         target_metadata=target_metadata,
-#         literal_binds=True,
-
-# 3. in async def run_async_migrations()
-
-#     Remove :-
-#     """connectable = async_engine_from_config(
-#         config.get_section(config.config_ini_section, {}),
-#         prefix="sqlalchemy.",
-#         poolclass=pool.NullPool,
-#     )"""
-#     and simple replace with create_async_engine(settings.DB_URL)
-
-# our imports
-from sqlmodel import SQLModel
-from app.db.db_models import User, Job, JobArtifact
-from app.config import settings
-from sqlalchemy.ext.asyncio import create_async_engine
-
-
 import asyncio
 from logging.config import fileConfig
-
-from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
-
+from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
+# 1. IMPORT ALL MODELS & SQLMODEL
+from app.config import settings
+
+# CRITICAL: Import your models here so they register with SQLModel.metadata
+from app.db.db_models import User, Job, RefreshToken, SQLModel
+
+# Access to the values within the .ini file
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# Setup loggers
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
+# 1. SET TARGET METADATA
 target_metadata = SQLModel.metadata
-
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
-
-    Calls to context.execute() here emit the given string to the
-    script output.
-
-    """
-
+    """Run migrations in 'offline' mode."""
+    # 2. DIRECTLY USE settings.POSTGRES_URL
     context.configure(
         url=settings.POSTGRES_URL,
         target_metadata=target_metadata,
@@ -89,11 +43,9 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    """In this scenario we need to create an Engine
-    and associate a connection with the context.
+    """Run migrations in 'online' mode using Async Engine."""
 
-    """
-
+    # 3. REPLACE WITH create_async_engine(settings.POSTGRES_URL)
     connectable = create_async_engine(settings.POSTGRES_URL)
 
     async with connectable.connect() as connection:
@@ -104,7 +56,6 @@ async def run_async_migrations() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-
     asyncio.run(run_async_migrations())
 
 
