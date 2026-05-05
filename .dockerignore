@@ -1,0 +1,31 @@
+# git and github
+.git
+.gitignore
+
+# python related
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+
+
+.env
+*.env
+.vscode/
+
+# local folders
+uploads/
+data/
+sonclarus_postgres_db/
+
+dist/
+build/
+*.egg-info/
+.dockerignore
+Dockerfile*
+docker-compose*
