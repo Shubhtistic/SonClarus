@@ -1,0 +1,27 @@
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+
+RUN apt-get update && apt-get install -y \
+    git \
+    python3.11 \
+    python3-pip \
+    ffmpeg \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python && \
+ln -sf /usr/bin/python3.11 /usr/bin/python3
+
+WORKDIR /sonclarus
+
+COPY worker/requirements.txt .
+RUN python3.11 -m pip install --no-cache-dir --upgrade pip && \
+    python3.11 -m pip install --no-cache-dir -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu124
+
+COPY ./worker ./worker
+COPY ./app ./app
+
+RUN mkdir -p /uploads
+
+# 9. Start the ARQ worker
+# We point it to the 'WorkerSettings' defined in your worker/main.py
+CMD ["arq", "worker.main.WorkerSettings"]
