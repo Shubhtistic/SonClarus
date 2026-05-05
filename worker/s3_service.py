@@ -16,7 +16,7 @@ class S3Service:
     async def download_file(self, s3_key: str, local_path: str):
         """Generic download: S3 Key -> Local Path"""
         async with self.session.client("s3", **self.creds) as s3:
-            print(f"📥 [S3] Downloading: {s3_key}")
+            print(f"Downloading: {s3_key}")
             await s3.download_file(self.bucket, s3_key, local_path)
 
     async def upload_folder(
@@ -31,5 +31,5 @@ class S3Service:
                 local_path = os.path.join(local_folder, filename)
                 if os.path.isfile(local_path):
                     s3_key = f"{user_id}/{job_id}/{phase_name}/{filename}"
-                    print(f"📤 [S3] Uploading {phase_name}: {filename}")
+                    print(f"[S3] Uploading {phase_name}: {filename}")
                     await s3.upload_file(local_path, self.bucket, s3_key)
