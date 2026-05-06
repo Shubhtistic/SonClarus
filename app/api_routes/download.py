@@ -39,14 +39,14 @@ async def download_file(
     base_name = res.filename.rsplit(".", 1)[0]
 
     if stage == StageOptions.separated1:
-        filename = f"{base_name}_speaker_1.wav"
+        filename = f"{base_name}_cleaned_speaker_1.wav"
         url = await generate_presigned_get(
             user_id=user_id, stage_name="separated", job_id=job_id, filename=filename
         )
         return {"download_url": url}
 
     elif stage == StageOptions.separated2:
-        filename = f"{base_name}_speaker_2.wav"
+        filename = f"{base_name}_cleaned_speaker_2.wav"
         url = await generate_presigned_get(
             user_id=user_id, stage_name="separated", job_id=job_id, filename=filename
         )
