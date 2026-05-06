@@ -12,7 +12,9 @@ boto_session = aioboto3.Session(
 )
 
 
-async def generate_presigned_post(user_id: str, job_id: str, filename: str) -> dict:
+async def generate_presigned_post(
+    user_id: str, job_id: str, filename: str, expires_in: int = 600
+) -> dict:
     """a secure url for frontend to upload file to s3"""
 
     object_key = f"{user_id}/{job_id}/original/{filename}"
@@ -29,7 +31,7 @@ async def generate_presigned_post(user_id: str, job_id: str, filename: str) -> d
                     # mst be 1kb to 50mb
                     ["content-length-range", 1024, 52428800],
                 ],
-                ExpiresIn=1800,  # 30 mins
+                ExpiresIn=expires_in,  # 30 mins
             )
             return response
 

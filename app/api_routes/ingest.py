@@ -33,7 +33,7 @@ async def upload_audio(
     user_id = str(current_user.id)
 
     presigned_data = await generate_presigned_post(
-        user_id=user_id, job_id=job_id, filename=request.filename
+        user_id=user_id, job_id=job_id, filename=request.filename, expires_in=600
     )
 
     # Use just the key for provider-agnostic storage
