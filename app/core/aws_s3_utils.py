@@ -14,22 +14,24 @@ boto_session = aioboto3.Session(
 
 async def generate_presigned_get(
     user_id: str, job_id: str, filename: str, stage_name: str, expires_in: int = 600
-) -> dict:
-    "url for frontend to doqnload files from s3"
+) -> str:
+    "url for frontend to download files from s3"
 
-    object_key = f"{user_id}/{job_id}/{filename}"
+    object_key = f"{user_id}/{job_id}/{stage_name}/{filename}"
 
     async with boto_session.client("s3") as s3_client:
         try:
-            response = await s3_client.generate_presigned_get(
-                Bucket=settings.AWS_BUCKET_NAME, Key=object_key, ExpiresIn=expires_in
+            response = await s3_client.generate_presigned_url(
+                ClientMethod="get_object",
+                Params={"Bucket": settings.AWS_BUCKET_NAME, "Key": object_key},
+                ExpiresIn=expires_in,
             )
             return response
 
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Could not generate upload url",
+                detail="Could not generate download url",
             )
 
 
