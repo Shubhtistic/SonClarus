@@ -12,6 +12,27 @@ boto_session = aioboto3.Session(
 )
 
 
+async def generate_presigned_get(
+    user_id: str, job_id: str, filename: str, expires_in: int = 600
+) -> dict:
+    "url for frontend to doqnload files from s3"
+
+    object_key = f"{user_id}/{job_id}/{filename}"
+
+    async with boto_session.client("s3") as s3_client:
+        try:
+            response = await s3_client.generate_presigned_get(
+                Bucket=settings.AWS_BUCKET_NAME, Key=object_key, ExpiresIn=expires_in
+            )
+            return response
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not generate upload url",
+            )
+
+
 async def generate_presigned_post(
     user_id: str, job_id: str, filename: str, expires_in: int = 600
 ) -> dict:
@@ -31,14 +52,14 @@ async def generate_presigned_post(
                     # mst be 1kb to 50mb
                     ["content-length-range", 1024, 52428800],
                 ],
-                ExpiresIn=expires_in,  # 30 mins
+                ExpiresIn=expires_in,
             )
             return response
 
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Could no generate upload url",
+                detail="Could not generate upload url",
             )
 
 
