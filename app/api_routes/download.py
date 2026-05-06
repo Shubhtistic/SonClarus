@@ -6,6 +6,7 @@ from app.schemas.stage_options import StageOptions
 from sqlalchemy import select
 from app.db.db_models import Job
 from app.core.aws_s3_utils import generate_presigned_get
+from app.db.db_models import JobStatus
 
 router = APIRouter()
 
@@ -20,12 +21,18 @@ async def download_file(
     """verify user and generate download url"""
     user_id = str(user.id)
 
-    qry = select(Job.filename).where(Job.id == job_id, Job.user_id == user_id)
+    qry = select(Job.filename, Job.status).where(
+        Job.id == job_id, Job.user_id == user_id
+    )
     res = (await db.execute(qry)).one_or_none()
 
     if not res:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Job Not found"  # FIX: Typo
+            status_code=status.HTTP_404_NOT_FOUND, detail="Job Not found"
+        )
+    if res.status != JobStatus.DONE:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Job Not completed"
         )
 
     # remove the wav from file
