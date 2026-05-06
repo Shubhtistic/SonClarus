@@ -13,7 +13,7 @@ boto_session = aioboto3.Session(
 
 
 async def generate_presigned_get(
-    user_id: str, job_id: str, filename: str, expires_in: int = 600
+    user_id: str, job_id: str, filename: str, stage_name: str, expires_in: int = 600
 ) -> dict:
     "url for frontend to doqnload files from s3"
 
