@@ -23,7 +23,7 @@ from app.core.aws_s3_utils import (
 router = APIRouter()
 
 
-@router.post("/uploads/request", dependencies=[Depends(check_limit(4))])
+@router.post("/uploads/request", dependencies=[Depends(check_limit(25))])
 async def upload_audio(
     current_user: CurrentVerifiedUserDep, db: DbSessionDep, request: UploadRequest
 ):
@@ -71,7 +71,7 @@ async def upload_audio(
     return {"job_id": job_id, "presigned_post": presigned_data}
 
 
-@router.post("/uploads/confirm/{job_id}", dependencies=[Depends(check_limit(10))])
+@router.post("/uploads/confirm/{job_id}", dependencies=[Depends(check_limit(25))])
 async def confirm_upload(
     job_id: str, db: DbSessionDep, current_user: CurrentVerifiedUserDep
 ):

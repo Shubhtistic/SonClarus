@@ -11,7 +11,7 @@ from app.dependancies.rate_limit import check_limit
 router = APIRouter()
 
 
-@router.get("/jobs", dependencies=[Depends(check_limit(20))])
+@router.get("/jobs", dependencies=[Depends(check_limit(45))])
 async def get_user_jobs(
     user: CurrentVerifiedUserDep,
     db: DbSessionDep,
@@ -66,7 +66,7 @@ async def get_user_jobs(
     }
 
 
-@router.get("/status/{job_id}", dependencies=[Depends(check_limit(15))])
+@router.get("/status/{job_id}", dependencies=[Depends(check_limit(60))])
 async def get_job_status(
     job_id: str, db: DbSessionDep, current_user: CurrentVerifiedUserDep
 ):

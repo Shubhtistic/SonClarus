@@ -11,7 +11,7 @@ from app.db.db_models import JobStatus
 router = APIRouter()
 
 
-@router.get("/download/{job_id}", dependencies=[Depends(check_limit(12))])
+@router.get("/download/{job_id}", dependencies=[Depends(check_limit(60))])
 async def download_file(
     job_id: str,
     stage: StageOptions,
