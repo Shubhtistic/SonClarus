@@ -1,6 +1,7 @@
 import asyncio
 import importlib
 import multiprocessing as mp
+import traceback
 from pathlib import Path
 from sqlalchemy import select, update
 
@@ -159,7 +160,7 @@ async def process_audios_pipeline(ctx: dict, job_id: str):
 
             # summarize
             if final_script_text.strip():
-                print("✨ Stage: Summarizing...")
+                print("Stage: Summarizing...")
                 async with AsyncSessionLocal() as session:
                     await session.execute(
                         update(Job)
@@ -191,7 +192,9 @@ async def process_audios_pipeline(ctx: dict, job_id: str):
         print(f"Job {job_id} completed.")
 
     except Exception as e:
-        print(f"Worker Failed: {e}")
+        print(f" Worker Pipeline Failed for Job {job_id}!")
+        print(traceback.format_exc())
+
         # record error in db for that job id
         async with AsyncSessionLocal() as session:
             await session.execute(

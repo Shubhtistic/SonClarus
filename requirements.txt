@@ -75,7 +75,7 @@ orjson==3.11.5
 packaging==23.2
 passlib==1.7.4
 propcache==0.4.1
-protobuf==7.34.1
+protobuf>=3.20.2,<6.0.0
 psycopg2-binary==2.9.11
 pyasn1==0.6.3
 pycparser==3.0

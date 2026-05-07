@@ -4,13 +4,13 @@ import os
 
 def run_summarization(full_transcript_text: str) -> str:
     if not full_transcript_text.strip():
-        return "No transcript content available to summarize."
+        raise Exception("No transcript content available to summarize.")
 
     # Retrieve the API key from environment variables
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         print("GEMINI_API_KEY is missing from env file/config file")
-        return "Error: API Key missing"
+        raise Exception("Error: API Key missing")
 
     try:
         genai.configure(api_key=api_key)
@@ -37,7 +37,7 @@ def run_summarization(full_transcript_text: str) -> str:
         if response and response.text:
             return response.text.strip()
         else:
-            return "Summarization returned an empty response."
+            raise Exception("Summarization returned an empty response.")
 
     except Exception as e:
-        return f"Summarization failed due to an external API error."
+        raise Exception(f"Summarize API Failed: {str(e)}")
