@@ -1,99 +1,11 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: sonclarus_db
-    ports:
-      - "5433:5432"
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-    volumes:
-      - sonclarus_postgres_db:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:8-alpine
-    container_name: sonclarus_redis
-    ports:
-      - "6380:6379"
-    deploy:
-      resources:
-        reservations:
-          memory: 32m
-        limits:
-          memory: 128m
-          cpus: '0.25'
-
-  alembic: 
-    build:
-      context: .
-      dockerfile: Dockerfile.api  
-    volumes:
-      - ./alembic:/sonclarus/alembic 
-      - ./app:/sonclarus/app
-    command: alembic upgrade head
-    env_file: .env
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  fastapi:
-    build:
+  api:
+    build: 
       context: .
       dockerfile: Dockerfile.api
-    container_name: sonclarus_api
-    # Overriding command for development reload
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    container_name: sonclarus-api
     ports:
-      - '8000:8000'
-    env_file: .env
-    volumes:
-      - ./app:/sonclarus/app
-      - ./alembic:/sonclarus/alembic
-    deploy:
-      resources:
-        reservations:
-          memory: 128m
-        limits:
-          memory: 512m
-          cpus: '0.5'
-    depends_on:
-      alembic:
-        condition: service_completed_successfully
-      redis:
-        condition: service_started
-
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    container_name: sonclarus_worker
-    env_file: .env
-    volumes:
-      - ./worker:/sonclarus/worker
-      - ./app:/sonclarus/app
-      - ~/uploads:/uploads 
-    depends_on:
-      alembic:
-        condition: service_completed_successfully
-      redis:
-        condition: service_started
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-          memory: 2gb    # ML models need more headroom than API
-        limits:
-          memory: 4gb    # Match your RTX 3050 VRAM limit for safety
-          cpus: '2.0'
-
-volumes:
-  sonclarus_postgres_db:
+      - "8000:8000"
+    env_file: 
+      - .env
+    restart: unless-stopped

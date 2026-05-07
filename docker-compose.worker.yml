@@ -1,0 +1,15 @@
+services:
+  worker:
+    build: 
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: sonclarus-worker
+    env_file: 
+      - .env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
