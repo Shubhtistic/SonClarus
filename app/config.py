@@ -25,6 +25,9 @@ class Settings(B):
     AWS_REGION: str
     AWS_BUCKET_NAME: str
 
+    # max upload bytes per file
+    MAX_FILE_SIZE: int
+
     class Config:
         env_file = ".env"
         extra = "ignore"

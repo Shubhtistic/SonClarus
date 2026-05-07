@@ -13,7 +13,11 @@ boto_session = aioboto3.Session(
 
 
 async def generate_presigned_get(
-    user_id: str, job_id: str, filename: str, stage_name: str, expires_in: int = 600
+    user_id: str,
+    job_id: str,
+    filename: str,
+    stage_name: str,
+    expires_in: int = 600,
 ) -> str:
     "url for frontend to download files from s3"
 
@@ -36,7 +40,11 @@ async def generate_presigned_get(
 
 
 async def generate_presigned_post(
-    user_id: str, job_id: str, filename: str, expires_in: int = 600
+    max_allowed_bytes: int,
+    user_id: str,
+    job_id: str,
+    filename: str,
+    expires_in: int = 600,
 ) -> dict:
     """a secure url for frontend to upload file to s3"""
 
@@ -51,8 +59,7 @@ async def generate_presigned_post(
                 Conditions=[
                     # must be wav file
                     {"Content-Type": "audio/wav"},
-                    # mst be 1kb to 50mb
-                    ["content-length-range", 1024, 52428800],
+                    ["content-length-range", 1024, max_allowed_bytes],
                 ],
                 ExpiresIn=expires_in,
             )
@@ -65,7 +72,7 @@ async def generate_presigned_post(
             )
 
 
-async def verify_s3_upload(user_id: str, job_id: str, filename: str) -> bool:
+async def verify_s3_upload(user_id: str, job_id: str, filename: str) -> dict:
     "Checks if file is uploaded to s3 or not"
 
     object_key = f"{user_id}/{job_id}/original/{filename}"
@@ -77,9 +84,9 @@ async def verify_s3_upload(user_id: str, job_id: str, filename: str) -> bool:
                 Bucket=settings.AWS_BUCKET_NAME, Key=object_key
             )
 
-            return True
+            return {"is_uploaded": True, "size": response["ContentLength"]}
     except s3_client.exceptions.ClientError as e:
         # if 404  error -> file missing
         if e.response["Error"]["Code"] == "404":
-            return False
+            return {"is_uploaded": False, "size": 0}
         raise
