@@ -45,7 +45,9 @@ async def get_current_verified_user(
     db: DbSessionDep, user_id: str = Depends(get_current_user)
 ) -> str:
 
-    query = select(User.id, User.is_active).where(User.id == user_id)
+    query = select(
+        User.id, User.is_active, User.storage_limit, User.storage_used
+    ).where(User.id == user_id)
     user = (await db.execute(query)).one_or_none()
 
     if user is None:
