@@ -90,3 +90,17 @@ async def verify_s3_upload(user_id: str, job_id: str, filename: str) -> dict:
         if e.response["Error"]["Code"] == "404":
             return {"is_uploaded": False, "size": 0}
         raise
+
+
+async def delete_file_from_s3(user_id: str, job_id: str, filename: str):
+    """Delete the exact uploaded file"""
+
+    object_key = f"{user_id}/{job_id}/original/{filename}"
+
+    async with boto_session.client("s3") as s3_client:
+        try:
+            await s3_client.delete_object(
+                Bucket=settings.AWS_BUCKET_NAME, Key=object_key
+            )
+        except Exception as e:
+            print(f"AWS S3 Delete Error for {object_key}: {e}")
