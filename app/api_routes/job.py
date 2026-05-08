@@ -22,25 +22,20 @@ async def get_user_jobs(
     """Fetch jobs for the user, including the summary"""
     user_id = user.id
 
+    # base query for user
+    base_qry = select(Job).where(Job.user_id == user_id)
+
     # total count
-    count_qry = (
-        select(func.count())
-        .where(Job.user_id == user_id)
-        .where(Job.status == JobStatus.DONE)
-    )
+    count_qry = select(func.count()).select_from(base_qry.subquery())
     total_count = (await db.execute(count_qry)).scalar()
 
     # data to be returned to frontend
-    data_qry = (
-        select(
-            Job.id,
-            Job.filename,
-            Job.summary,
-            Job.created_at,
-        )
-        .where(Job.user_id == user_id)
-        .where(Job.status == JobStatus.DONE)
-    )
+    data_qry = select(
+        Job.id,
+        Job.filename,
+        Job.summary,
+        Job.created_at,
+    ).where(Job.user_id == user_id)
 
     # Apply sorting
     if sort == "desc":

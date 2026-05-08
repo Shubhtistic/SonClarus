@@ -2,9 +2,9 @@ import streamlit as st
 import httpx
 import time
 
-API_BASE_URL = st.secrets["API_BASE_URL"]
+API_BASE_URL = "http://localhost:8000"
 
-st.set_page_config(page_title="Sonclarus AI", layout="wide")
+st.set_page_config(page_title="Sonclarus AI", layout="centered")
 
 if "access_token" not in st.session_state:
     st.session_state.access_token = None
@@ -64,18 +64,13 @@ if not st.session_state.is_logged_in:
     else:
         st.subheader("Create an account")
         with st.form("register_form"):
-            new_full_name = st.text_input("Full Name")
             new_email = st.text_input("Email")
             new_password = st.text_input("Password", type="password")
             submitted = st.form_submit_button("Register")
 
             if submitted:
                 try:
-                    payload = {
-                        "email": new_email,
-                        "password": new_password,
-                        "full_name": new_full_name,
-                    }
+                    payload = {"email": new_email, "password": new_password}
                     response = httpx.post(f"{API_BASE_URL}/register", json=payload)
 
                     if response.status_code == 201:
@@ -97,8 +92,7 @@ if not st.session_state.is_logged_in:
 
 else:
     with st.sidebar:
-        st.title("Sonclarus AI")
-        st.success("Securely Logged In")
+        st.title("Controls")
         if st.button("Logout", use_container_width=True):
             headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
             try:
@@ -109,167 +103,156 @@ else:
             st.session_state.is_logged_in = False
             st.rerun()
 
-    tab_upload, tab_dashboard = st.tabs(["Upload Audio", "Job Dashboard"])
+        st.markdown("---")
+        st.header("Job History")
 
-    with tab_upload:
-        st.subheader("Process New Audio")
-        uploaded_file = st.file_uploader("Choose an audio file", type=["wav"])
+        show_history = st.toggle("Load Processing History")
 
-        if uploaded_file is not None:
-            st.write(f"**Filename:** {uploaded_file.name}")
-            st.write(f"**Size:** {uploaded_file.size / (1024 * 1024):.2f} MB")
-            st.audio(uploaded_file)
+        if show_history:
+            headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
+            try:
+                jobs_res = httpx.get(
+                    f"{API_BASE_URL}/jobs",
+                    params={"skip": st.session_state.skip, "limit": 10},
+                    headers=headers,
+                )
 
-            if st.button("Start Processing Pipeline"):
-                headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
+                if jobs_res.status_code == 200:
+                    jobs_data = jobs_res.json()
+                    total_jobs = jobs_data.get("total", 0)
+                    jobs_list = jobs_data.get("data", [])
 
-                with st.status("Initializing Job...", expanded=True) as status:
-                    try:
-                        status.update(label="Requesting secure S3 upload link...")
-                        payload = {
-                            "filename": uploaded_file.name,
-                            "file_size_bytes": uploaded_file.size,
-                        }
-
-                        req_response = httpx.post(
-                            f"{API_BASE_URL}/uploads/request",
-                            headers=headers,
-                            json=payload,
-                        )
-                        req_response.raise_for_status()
-
-                        upload_data = req_response.json()
-                        job_id = upload_data["job_id"]
-                        presigned_url = upload_data["presigned_post"]["url"]
-                        presigned_fields = upload_data["presigned_post"]["fields"]
-
-                        status.update(label="Uploading file directly to AWS S3...")
-
-                        files = {
-                            "file": (
-                                uploaded_file.name,
-                                uploaded_file.getvalue(),
-                                uploaded_file.type,
-                            )
-                        }
-                        s3_response = httpx.post(
-                            presigned_url, data=presigned_fields, files=files
-                        )
-
-                        if s3_response.status_code == 204:
-                            status.update(
-                                label="File secured. Notifying worker queue..."
-                            )
-                            confirm_response = httpx.post(
-                                f"{API_BASE_URL}/uploads/confirm/{job_id}",
-                                headers=headers,
-                            )
-                            confirm_response.raise_for_status()
-
-                            status.update(
-                                label="Job successfully queued!", state="complete"
-                            )
-                            st.success(
-                                "File uploaded! Switch to the Job Dashboard to check its status."
-                            )
-                            time.sleep(2)
-                            st.rerun()
-
-                        else:
-                            status.update(label="S3 Upload Failed", state="error")
-                            st.error(f"AWS Error: {s3_response.text}")
-
-                    except httpx.HTTPStatusError as e:
-                        status.update(label="API Error", state="error")
-                        st.error(f"Backend rejected the request: {e.response.text}")
-                    except Exception as e:
-                        status.update(label="Unexpected Error", state="error")
-                        st.error(str(e))
-
-    with tab_dashboard:
-        st.subheader("Your Processed Files")
-        headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
-
-        try:
-            jobs_res = httpx.get(
-                f"{API_BASE_URL}/jobs",
-                params={"skip": st.session_state.skip, "limit": 10},
-                headers=headers,
-            )
-
-            if jobs_res.status_code == 200:
-                jobs_data = jobs_res.json()
-                total_jobs = jobs_data.get("total", 0)
-                jobs_list = jobs_data.get("data", [])
-
-                if not jobs_list:
-                    st.info(
-                        "No completed jobs found yet. Upload a file to get started."
-                    )
-                else:
-                    for job in jobs_list:
-                        with st.container(border=True):
+                    if not jobs_list:
+                        st.info("No jobs found.")
+                    else:
+                        for job in jobs_list:
                             filename = job.get("filename", "Unknown")
                             job_id = job.get("job_id", "")
                             summary = job.get("summary", "")
-                            created_at = job.get("created_at", "")[:10]
 
-                            col_title, col_date = st.columns([3, 1])
-                            with col_title:
-                                st.markdown(f"#### {filename}")
-                            with col_date:
-                                st.caption(f"Date: {created_at}")
+                            with st.expander(f"**{filename}**"):
 
-                            if summary:
-                                st.write(summary)
+                                if summary:
+                                    st.markdown("**Summary:**")
+                                    st.caption(summary)
+                                    st.markdown("---")
 
-                            st.markdown("<br>", unsafe_allow_html=True)
-
-                            btn_col1, btn_col2, btn_col3 = st.columns(3)
-
-                            if job_id:
-                                url_t = fetch_download_url(job_id, "transcribe")
-                                if url_t:
-                                    with btn_col1:
+                                if job_id:
+                                    st.markdown("**Downloads:**")
+                                    url_t = fetch_download_url(job_id, "transcribe")
+                                    if url_t:
                                         st.link_button(
-                                            "Download Transcript",
+                                            "Transcript",
                                             url_t,
                                             use_container_width=True,
                                         )
 
-                                url_s1 = fetch_download_url(job_id, "separated1")
-                                if url_s1:
-                                    with btn_col2:
+                                    url_s1 = fetch_download_url(job_id, "separated1")
+                                    if url_s1:
                                         st.link_button(
-                                            "Download Speaker 1",
+                                            "Speaker 1",
                                             url_s1,
                                             use_container_width=True,
                                         )
 
-                                url_s2 = fetch_download_url(job_id, "separated2")
-                                if url_s2:
-                                    with btn_col3:
+                                    url_s2 = fetch_download_url(job_id, "separated2")
+                                    if url_s2:
                                         st.link_button(
-                                            "Download Speaker 2",
+                                            "Speaker 2",
                                             url_s2,
                                             use_container_width=True,
                                         )
 
-                    st.markdown("---")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.session_state.skip > 0:
-                            if st.button("Previous Page"):
-                                st.session_state.skip -= 10
-                                st.rerun()
-                    with col2:
-                        if st.session_state.skip + 10 < total_jobs:
-                            if st.button("Next Page"):
-                                st.session_state.skip += 10
-                                st.rerun()
-                    st.caption(
-                        f"Showing {st.session_state.skip + 1}-{min(st.session_state.skip + 10, total_jobs)} of {total_jobs}"
+                        st.markdown("---")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.session_state.skip > 0:
+                                if st.button("Prev"):
+                                    st.session_state.skip -= 10
+                                    st.rerun()
+                        with col2:
+                            if st.session_state.skip + 10 < total_jobs:
+                                if st.button("Next"):
+                                    st.session_state.skip += 10
+                                    st.rerun()
+                        st.caption(
+                            f"Showing {st.session_state.skip + 1}-{min(st.session_state.skip + 10, total_jobs)} of {total_jobs}"
+                        )
+
+            except Exception as e:
+                st.error(f"Failed to load jobs: {e}")
+
+    st.success("You are securely logged in!")
+    st.markdown("---")
+
+    st.subheader("1. Upload Audio")
+
+    uploaded_file = st.file_uploader("Choose an audio file", type=["wav"])
+
+    if uploaded_file is not None:
+        st.write(f"**Filename:** {uploaded_file.name}")
+        st.write(f"**Size:** {uploaded_file.size / (1024 * 1024):.2f} MB")
+        st.audio(uploaded_file)
+
+        if st.button("Start Processing Pipeline"):
+            headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
+
+            with st.status("Initializing Job...", expanded=True) as status:
+                try:
+                    status.update(label="Requesting secure S3 upload link...")
+
+                    payload = {
+                        "filename": uploaded_file.name,
+                        "file_size_bytes": uploaded_file.size,
+                    }
+
+                    req_response = httpx.post(
+                        f"{API_BASE_URL}/uploads/request", headers=headers, json=payload
+                    )
+                    req_response.raise_for_status()
+
+                    upload_data = req_response.json()
+                    job_id = upload_data["job_id"]
+                    presigned_url = upload_data["presigned_post"]["url"]
+                    presigned_fields = upload_data["presigned_post"]["fields"]
+
+                    status.update(label="Uploading file directly to AWS S3...")
+
+                    files = {
+                        "file": (
+                            uploaded_file.name,
+                            uploaded_file.getvalue(),
+                            uploaded_file.type,
+                        )
+                    }
+                    s3_response = httpx.post(
+                        presigned_url, data=presigned_fields, files=files
                     )
 
-        except Exception as e:
-            st.error(f"Failed to load jobs: {e}")
+                    if s3_response.status_code == 204:
+                        status.update(label="File secured. Notifying worker queue...")
+
+                        confirm_response = httpx.post(
+                            f"{API_BASE_URL}/uploads/confirm/{job_id}", headers=headers
+                        )
+                        confirm_response.raise_for_status()
+
+                        status.update(
+                            label="Job successfully queued!", state="complete"
+                        )
+                        st.success(
+                            "File uploaded! Open the sidebar history to check its status."
+                        )
+                        time.sleep(2)
+                        st.rerun()
+
+                    else:
+                        status.update(label="S3 Upload Failed", state="error")
+                        st.error(f"AWS Error: {s3_response.text}")
+
+                except httpx.HTTPStatusError as e:
+                    status.update(label="API Error", state="error")
+                    st.error(f"Backend rejected the request: {e.response.text}")
+                except Exception as e:
+                    status.update(label="Unexpected Error", state="error")
+                    st.error(str(e))
