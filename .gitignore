@@ -26,3 +26,5 @@ venv/
 .vscode/
 .idea/
 *.log
+
+frontend/.streamlit/secrets.toml

@@ -1,6 +1,5 @@
 from typing import Optional, List
-from sqlmodel import SQLModel, Field, DateTime, Relationship, Column, String
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlmodel import SQLModel, Field, DateTime, Relationship, Column, String, Index
 from datetime import datetime, timezone
 from uuid import UUID
 from uuid_utils import uuid7
@@ -34,6 +33,24 @@ class User(SQLModel, table=True):
     refresh_tokens: List["RefreshToken"] = Relationship(back_populates="user")
 
 
+class RefreshToken(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid7, primary_key=True)
+
+    user_id: UUID = Field(foreign_key="user.id", index=True)
+    hashed_token: str = Field(index=True)
+
+    expires_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+    user: Optional[User] = Relationship(back_populates="refresh_tokens")
+    revoked: bool = Field(default=False)
+
+
 class Job(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid7, primary_key=True)
     filename: str
@@ -56,20 +73,5 @@ class Job(SQLModel, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-
-class RefreshToken(SQLModel, table=True):
-    id: UUID = Field(default_factory=uuid7, primary_key=True)
-
-    user_id: UUID = Field(foreign_key="user.id", index=True)
-    hashed_token: str
-
-    expires_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False)
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), nullable=False),
-    )
-
-    user: Optional[User] = Relationship(back_populates="refresh_tokens")
-    revoked: bool = Field(default=False)
+    # tuple -> must add a comma for single entry
+    __table_args__ = (Index("idx_user_and_created_at", "user_id", "created_at"),)
