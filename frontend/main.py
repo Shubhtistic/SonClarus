@@ -23,6 +23,7 @@ def fetch_download_url(job_id: str, stage: str):
             f"{API_BASE_URL}/download/{job_id}",
             params={"stage": stage},
             headers=headers,
+            timeout=30.0,
         )
         if res.status_code == 200:
             return res.json().get("download_url")
@@ -44,7 +45,9 @@ if not st.session_state.is_logged_in:
             if submitted:
                 try:
                     payload = {"username": email, "password": password}
-                    response = httpx.post(f"{API_BASE_URL}/login", data=payload)
+                    response = httpx.post(
+                        f"{API_BASE_URL}/login", data=payload, timeout=30.0
+                    )
 
                     if response.status_code == 200:
                         data = response.json()
@@ -76,7 +79,9 @@ if not st.session_state.is_logged_in:
                         "password": new_password,
                         "full_name": new_full_name,
                     }
-                    response = httpx.post(f"{API_BASE_URL}/register", json=payload)
+                    response = httpx.post(
+                        f"{API_BASE_URL}/register", json=payload, timeout=30.0
+                    )
 
                     if response.status_code == 201:
                         data = response.json()
@@ -102,7 +107,7 @@ else:
         if st.button("Logout", use_container_width=True):
             headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
             try:
-                httpx.post(f"{API_BASE_URL}/logout", headers=headers)
+                httpx.post(f"{API_BASE_URL}/logout", headers=headers, timeout=30.0)
             except Exception:
                 pass
             st.session_state.access_token = None
@@ -135,6 +140,7 @@ else:
                             f"{API_BASE_URL}/uploads/request",
                             headers=headers,
                             json=payload,
+                            timeout=30.0,
                         )
                         req_response.raise_for_status()
 
@@ -153,7 +159,10 @@ else:
                             )
                         }
                         s3_response = httpx.post(
-                            presigned_url, data=presigned_fields, files=files
+                            presigned_url,
+                            data=presigned_fields,
+                            files=files,
+                            timeout=120.0,
                         )
 
                         if s3_response.status_code == 204:
@@ -163,6 +172,7 @@ else:
                             confirm_response = httpx.post(
                                 f"{API_BASE_URL}/uploads/confirm/{job_id}",
                                 headers=headers,
+                                timeout=30.0,
                             )
                             confirm_response.raise_for_status()
 
@@ -195,6 +205,7 @@ else:
                 f"{API_BASE_URL}/jobs",
                 params={"skip": st.session_state.skip, "limit": 10},
                 headers=headers,
+                timeout=30.0,
             )
 
             if jobs_res.status_code == 200:
