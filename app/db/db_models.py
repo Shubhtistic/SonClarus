@@ -1,6 +1,5 @@
 from typing import Optional, List
-from sqlmodel import SQLModel, Field, DateTime, Relationship, Column, String
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlmodel import SQLModel, Field, DateTime, Relationship, Column, String, Index
 from datetime import datetime, timezone
 from uuid import UUID
 from uuid_utils import uuid7
@@ -73,3 +72,6 @@ class Job(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_type=DateTime(timezone=True),
     )
+
+    # tuple -> must add a comma for single entry
+    __table_args__ = (Index("idx_user_and_created_at", "user_id", "created_at"),)
