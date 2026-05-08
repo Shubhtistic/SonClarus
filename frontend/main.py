@@ -88,9 +88,10 @@ if not st.session_state.is_logged_in:
                         st.success("Registration successful!")
                         st.info(f"Your User ID: {data.get('id')}")
                         st.info("You have 100MB free storage available.")
-                        if st.button("Go to Login"):
-                            st.session_state.show_register = False
-                            st.rerun()
+                        st.success("Redirecting to login...")
+                        time.sleep(2)
+                        st.session_state.show_register = False
+                        st.rerun()
                     else:
                         st.error(f"Registration failed: {response.text}")
                 except httpx.RequestError as e:
