@@ -83,7 +83,7 @@ if not st.session_state.is_logged_in:
                         f"{API_BASE_URL}/register", json=payload, timeout=30.0
                     )
 
-                    if response.status_code == 201:
+                    if response.status_code in (200, 201):
                         data = response.json()
                         st.success("Registration successful!")
                         st.info(f"Your User ID: {data.get('id')}")
