@@ -16,7 +16,7 @@ def run_summarization(full_transcript_text: str) -> str:
         genai.configure(api_key=api_key)
 
         # initialize gemini 1.5 flash
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
 
         # system prompt
         prompt = f"""
