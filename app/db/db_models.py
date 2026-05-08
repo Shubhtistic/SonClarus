@@ -34,6 +34,24 @@ class User(SQLModel, table=True):
     refresh_tokens: List["RefreshToken"] = Relationship(back_populates="user")
 
 
+class RefreshToken(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid7, primary_key=True)
+
+    user_id: UUID = Field(foreign_key="user.id", index=True)
+    hashed_token: str = Field(index=True)
+
+    expires_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+    user: Optional[User] = Relationship(back_populates="refresh_tokens")
+    revoked: bool = Field(default=False)
+
+
 class Job(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid7, primary_key=True)
     filename: str
@@ -55,21 +73,3 @@ class Job(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_type=DateTime(timezone=True),
     )
-
-
-class RefreshToken(SQLModel, table=True):
-    id: UUID = Field(default_factory=uuid7, primary_key=True)
-
-    user_id: UUID = Field(foreign_key="user.id", index=True)
-    hashed_token: str
-
-    expires_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False)
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), nullable=False),
-    )
-
-    user: Optional[User] = Relationship(back_populates="refresh_tokens")
-    revoked: bool = Field(default=False)
