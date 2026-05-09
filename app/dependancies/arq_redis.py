@@ -2,8 +2,12 @@ from arq import create_pool
 from arq.connections import RedisSettings
 from app.config import settings
 
-# redis settings
-Redis_Settings = RedisSettings(host=settings.REDIS_HOST)
+# we used from_dsn instead of direct port connection
+# because direct port connection assumes connection without ssl
+# which may cause issues if redis is configured with ssl
+Redis_Settings = RedisSettings.from_dsn(settings.REDIS_URL)
+
+
 # global variable
 redis_pool = None
 
