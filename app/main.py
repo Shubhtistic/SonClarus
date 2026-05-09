@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from app.api_routes import ingest, job, auth, download
 from scalar_fastapi import get_scalar_api_reference
 from app.dependancies.arq_redis import init_redis_pool, close_redis_pool
+from app.config import settings
 
 from contextlib import asynccontextmanager
 
@@ -13,7 +14,12 @@ async def lifespan(app: FastAPI):
     await close_redis_pool()
 
 
-app = FastAPI(title="SonClarus Api", lifespan=lifespan)
+app = FastAPI(
+    title="Vortex Telemetry Engine",
+    lifespan=lifespan,
+    docs_url=f"/{settings.DOCS_ENDPOINT}",
+    redoc_url=None,
+)
 app.include_router(auth.router, tags=["Auth"])
 app.include_router(ingest.router, tags=["Ingestion"])
 app.include_router(job.router, tags=["Job Status"])

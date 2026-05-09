@@ -25,6 +25,8 @@ class Settings(B):
     AWS_REGION: str
     AWS_BUCKET_NAME: str
 
+    DOCS_ENDPOINT: str
+
     # max upload bytes per file
     MAX_FILE_SIZE: int
 
