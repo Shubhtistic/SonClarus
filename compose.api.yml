@@ -1,0 +1,24 @@
+services:
+
+  api:
+
+    build: 
+
+      context: .
+
+      dockerfile: Dockerfile.api
+
+    container_name: sonclarus-api
+
+    ports:
+
+      - "8000:8000"
+
+    env_file: 
+
+      - .env
+
+    restart: unless-stopped
+
+
+
