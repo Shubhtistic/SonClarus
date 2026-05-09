@@ -2,6 +2,7 @@ services:
   worker:
     image: shubhtistic/sonclarus-worker:v1
     container_name: sonclarus-worker
+    network_mode: "host"  # use the host
     env_file: 
       - .env
     deploy:
