@@ -1,24 +1,16 @@
 services:
+  alembic:
+    image: shubhtistic/fastapi-image:v1
+    container_name: sonclarus-migrator
+    env_file: .env
+    command: alembic upgrade head
 
   api:
-
-    build: 
-
-      context: .
-
-      dockerfile: Dockerfile.api
-
+    image: shubhtistic/fastapi-image:v1
     container_name: sonclarus-api
-
     ports:
-
       - "8000:8000"
-
-    env_file: 
-
-      - .env
-
-    restart: unless-stopped
-
-
-
+    env_file: .env
+    depends_on:
+      alembic:
+        condition: service_completed_successfully

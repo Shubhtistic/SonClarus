@@ -1,31 +1,14 @@
 services:
-
   worker:
-
-    build: 
-
-      context: .
-
-      dockerfile: Dockerfile.worker
-
+    image: shubhtistic/sonclarus-worker:v1
     container_name: sonclarus-worker
-
     env_file: 
-
       - .env
-
     deploy:
-
       resources:
-
         reservations:
-
           devices:
-
             - driver: nvidia
-
               count: all
-
               capabilities: [gpu]
-
-
+    restart: unless-stopped
