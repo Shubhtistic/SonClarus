@@ -15,6 +15,9 @@ processed/
 .ruff_cache
 .ruff_cache/
 
+# dev container
+.devcontainer/
+
 # Python Junk (Generated automatically)
 __pycache__/
 *.pyc
