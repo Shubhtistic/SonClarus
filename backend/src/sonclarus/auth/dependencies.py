@@ -69,6 +69,8 @@ async def verified_current_user_dep(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive or not verified",
         )
+    claims["storage_used"] = user.storage_used
+    claims["storage_limit"] = user.storage_limit
 
     return claims
 
