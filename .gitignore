@@ -21,6 +21,7 @@ processed/
 # Python Junk (Generated automatically)
 __pycache__/
 *.pyc
+vram_calculation_readme.md
 venv/
 .venv/
 
