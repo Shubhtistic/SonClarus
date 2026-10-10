@@ -17,5 +17,3 @@ class ApiResponseSchema(BaseModel):
     meta: Optional[dict[str, Any]] = None
 
     _validate_text = field_validator("message", mode="before")(reject_blank_text)
-
-

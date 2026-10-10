@@ -1,6 +1,6 @@
 # =====================================================================
 # Shared local RustFS S3 server
-#
+# use -p in compose command to let the compose run as seperate projects in same folder
 # First-time setup:
 #   1. Create the shared network once per machine:
 #        docker network create my-storage-net

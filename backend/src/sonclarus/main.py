@@ -1,24 +1,50 @@
+import logging
 from contextlib import asynccontextmanager
 from fastapi.exceptions import RequestValidationError
 from scalar_fastapi import get_scalar_api_reference
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.sonclarus.shared.logging_config import setup_logging
+from src.sonclarus.shared.kafka_client import KafkaProducer
 from src.sonclarus.shared.responses import ApiResponse
 from src.sonclarus.shared.redis_client import init_redis, close_redis
 from src.sonclarus.api.routers import router as api_router
 from src.sonclarus.shared.config import get_settings
 from src.sonclarus.shared.responses import ApiResponse
 
+# --- logger ---
+
+logger = logging.getLogger(__name__)
+setup_logging()
+
 
 # --- lifespan handler ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Initializing Redis client")
     await init_redis()
+    logger.info("Redis client initialized successfully")
+
+    logger.info("Starting Kafka producer")
+    await KafkaProducer.start()
+    logger.info("Kafka producer started successfully")
+
+    logger.info("Application startup completed")
 
     yield
 
+    logger.info("Application shutdown initiated")
+
+    logger.info("Stopping Kafka producer")
+    await KafkaProducer.stop()
+    logger.info("Kafka producer stopped successfully")
+
+    logger.info("Closing Redis client")
     await close_redis()
+    logger.info("Redis client closed successfully")
+
+    logger.info("Application shutdown completed")
 
 
 # --- create app ---

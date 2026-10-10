@@ -110,6 +110,9 @@ services:
       dockerfile: Dockerfile
       target: builder
     env_file: .env
+    volumes:
+      - ./alembic:/sonclarus/backend/alembic
+      - ./alembic.ini:/sonclarus/backend/alembic.ini
     command: ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"]
     depends_on:
       postgres:

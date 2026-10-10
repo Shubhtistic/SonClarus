@@ -242,6 +242,9 @@ class AWSSettings(CommonSettings):
     bucket_name: str = Field(
         validation_alias="AWS_BUCKET_NAME",
     )
+    endpoint_url: str = Field(
+        validation_alias="AWS_ENDPOINT_URL",
+    )
 
 
 # --- Gemini / LLM ---
