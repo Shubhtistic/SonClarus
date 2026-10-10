@@ -1,0 +1,51 @@
+# =====================================================================
+# Shared local RustFS S3 server
+#
+# First-time setup:
+#   1. Create the shared network once per machine:
+#        docker network create my-storage-net
+#   2. Create a .env file next to this file:
+#        AWS_ACCESS_KEY_ID=SONCLARUSKEY123
+#        AWS_SECRET_ACCESS_KEY=<long random secret, e.g. openssl rand -base64 24>
+#   3. Start RustFS:
+#        docker compose up -d
+#   4. Open http://localhost:9001, log in with the keys above, and create
+#      your bucket, for example sonclarus1.
+#
+# Use RustFS from another Docker project:
+#   In that project's docker-compose.yml, add this to the service:
+#        networks: [default, my-storage-net]
+#   Add this at the bottom of that file:
+#        networks:
+#          my-storage-net:
+#            external: true
+#   Then add this to that project's .env:
+#        AWS_ENDPOINT_URL=http://<rustfs-container-name>:9000
+#
+# Run a separate RustFS server:
+#   Do not share this server. Run this file on your own machine with your
+#   own .env keys and follow the steps above. Each person gets an independent
+#   server.
+#
+# AWS_REGION can be any value, such as ap-south-1. It is only a label.
+# =====================================================================
+services:
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs
+    restart: unless-stopped
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web console
+    environment:
+      RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID}
+      RUSTFS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - rustfs-data:/data
+    networks:
+      - my-storage-net
+volumes:
+  rustfs-data:
+networks:
+  my-storage-net:
+    external: true
