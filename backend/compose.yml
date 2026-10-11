@@ -1,3 +1,5 @@
+name: backend
+
 services:
 
   # --- postgres ---
@@ -32,40 +34,73 @@ services:
       retries: 3
 
 
-  # --- kafka ---
-  kafka:
-    image: apache/kafka:4.0.0
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,EXTERNAL://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_NUM_PARTITIONS: 3
-      KAFKA_LOG_DIRS: /var/lib/kafka/data
-    ports:
-      - "9092:9092"
-    volumes:
-      - sonclarus_kafka_data:/var/lib/kafka/data
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092 > /dev/null 2>&1"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
+  # ===================================================================
+  # Kafka is not part of this file. It runs as its own project
+  # (compose.kafka.yml) on the shared "my-kafka-net" network, so this
+  # backend, the ML worker and other projects can use one broker, and it
+  # keeps running when you stop or rebuild this stack.
+  #
+  # Use the shared Kafka (default, nothing to uncomment):
+  #   1. Create the network once per machine:
+  #        docker network create my-kafka-net
+  #   2. Start Kafka:
+  #        docker compose -p kafka-local -f compose.kafka.yml up -d
+  #   3. Make sure .env has:
+  #        KAFKA_BOOTSTRAP_SERVERS=kafka:19092
+  #   4. Run: docker compose up -d
+  #   depends_on cannot see another compose project, so the backend does not
+  #   wait for Kafka. Start Kafka first. The producer retries on startup
+  #   (KAFKA_START_MAX_ATTEMPTS).
+  #
+  # Put Kafka back inside this file:
+  #   1. Uncomment the "kafka" service below and "sonclarus_kafka_data" at
+  #      the bottom of this file.
+  #   2. Uncomment "kafka" under backend -> depends_on.
+  #   3. Remove "my-kafka-net" from backend -> networks and from the bottom
+  #      of this file.
+  #   4. Keep KAFKA_BOOTSTRAP_SERVERS=kafka:19092 (the service name is the same).
+  #   5. Stop the separate Kafka first, host port 9092 must be free:
+  #        docker compose -p kafka-local -f compose.kafka.yml down
+  #
+  # Managed Kafka (cloud): leave it all commented, remove "my-kafka-net"
+  # from backend -> networks and from the bottom, and set
+  # KAFKA_BOOTSTRAP_SERVERS plus the SASL_SSL settings in .env.
+  # ===================================================================
+  # kafka:
+  #   image: apache/kafka:4.0.0
+  #   environment:
+  #     KAFKA_NODE_ID: 1
+  #     KAFKA_PROCESS_ROLES: broker,controller
+  #     KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093
+  #     KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,EXTERNAL://localhost:9092
+  #     KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+  #     KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+  #     KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+  #     KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+  #     KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  #     KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+  #     KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+  #     KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+  #     KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+  #     KAFKA_NUM_PARTITIONS: 3
+  #     KAFKA_LOG_DIRS: /var/lib/kafka/data
+  #   ports:
+  #     - "9092:9092"
+  #   volumes:
+  #     - sonclarus_kafka_data:/var/lib/kafka/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092 > /dev/null 2>&1"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 10
+
+
   # ===================================================================
   # Optional: local RustFS S3 service for this compose file.
   #
   # Use this when you do not have a separate shared RustFS server and want
   # local S3 to start and stop with this project. It uses this compose file's
-  # default network and does not need the external "storage-net" network.
+  # default network and does not need the external "my-storage-net" network.
   #
   # To enable it:
   #   1. Uncomment the "rustfs" service below and the
@@ -98,8 +133,8 @@ services:
   #     - "9000:9000"   # S3 API
   #     - "9001:9001"   # web console
   #   environment:
-  #     RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
-  #     RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+  #     RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID}
+  #     RUSTFS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY}
   #   volumes:
   #     - sonclarus_rustfs_data:/data
 
@@ -119,7 +154,7 @@ services:
         condition: service_healthy
 
 
-  # --- Backend ---     
+  # --- Backend ---
   backend:
     build:
       context: .
@@ -138,21 +173,28 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_started
-      kafka:
-        condition: service_healthy # remove if you use a managed Kafka cluster
+      # Uncomment these two lines only if you put the kafka service back in
+      # this file (see the Kafka comment block above). They cannot work with
+      # a Kafka that runs in another compose project.
+      # kafka:
+      #   condition: service_healthy
     networks:
       - default
       - my-storage-net # remove if you add RustFS to this compose file
+      - my-kafka-net # remove if you add Kafka back to this compose file
 
-      
+
 volumes:
   sonclarus_pg_data:
   sonclarus_redis_data:
-  sonclarus_kafka_data:
+  # sonclarus_kafka_data:    # uncomment with the Kafka service above
   # sonclarus_rustfs_data:   # uncomment with the RustFS service above
 
 
 # Remove this network if you add RustFS to this compose file.
 networks:
   my-storage-net:
+    external: true
+  # Remove this network if you add Kafka back to this compose file.
+  my-kafka-net:
     external: true

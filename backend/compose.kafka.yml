@@ -1,0 +1,87 @@
+# =====================================================================
+# Shared local Kafka server (single node, KRaft mode - no Zookeeper)
+# Use -p in the compose command so this runs as its own project, even if
+# it sits in the same folder as another compose file:
+#        docker compose -p kafka-local -f compose.kafka.yml up -d
+#
+# First-time setup:
+#   1. Create the shared network once per machine:
+#        docker network create my-kafka-net
+#   2. Start Kafka:
+#        docker compose -p kafka-local -f compose.kafka.yml up -d
+#   3. Check it is healthy (wait until STATUS says "healthy"):
+#        docker compose -p kafka-local -f compose.kafka.yml ps
+#   No .env file is needed. This setup is PLAINTEXT, for local development only.
+#
+# Use Kafka from another Docker project:
+#   In that project's docker-compose.yml, add this to the service:
+#        networks: [default, my-kafka-net]
+#   Add this at the bottom of that file:
+#        networks:
+#          my-kafka-net:
+#            external: true
+#   Then add this to that project's .env:
+#        KAFKA_BOOTSTRAP_SERVERS=kafka:19092
+#   NOTE: "depends_on" cannot see a service from another compose project.
+#   Do not add "kafka" to depends_on there. Start this Kafka first, and let
+#   the app retry its connection while the broker boots.
+#
+# Use Kafka from your own machine (an app or a tool NOT running in Docker):
+#        KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+#
+# Why two ports?
+#   19092 (INTERNAL) is for containers on my-kafka-net, reached as kafka:19092.
+#   9092  (EXTERNAL) is for your host machine, reached as localhost:9092.
+#   Kafka tells every client which address to reconnect to (the advertised
+#   listener), so each kind of client needs its own address.
+#
+# If you rename container_name or the service from "kafka":
+#   also change KAFKA_ADVERTISED_LISTENERS (INTERNAL://kafka:19092) and
+#   KAFKA_CONTROLLER_QUORUM_VOTERS (1@kafka:9093), or clients will fail
+#   to reconnect after the first connection.
+#
+# Topics are created automatically on first use, with 3 partitions each.
+#
+# To wipe all Kafka data and start clean:
+#        docker compose -p kafka-local -f compose.kafka.yml down -v
+# =====================================================================
+
+name: kafka-local
+
+services:
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "9092:9092" # for your host machine (localhost:9092)
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - my-kafka-net
+volumes:
+  kafka-data:
+networks:
+  my-kafka-net:
+    external: true
