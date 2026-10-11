@@ -7,7 +7,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.sonclarus.jobs.models import Job
-from src.sonclarus.jobs.enums import JobStatus
+from src.sonclarus.jobs.enums import JobStatus, StageName
 from src.sonclarus.shared.database import create, execute_query
 from src.sonclarus.shared.redis_client import get_redis
 
@@ -41,6 +41,7 @@ class JobRepository:
         user_id: UUID,
         file_metadata: dict,
         stages: dict,
+        current_stage: StageName,  # first selected stage, the one published to Kafka
         uploaded_at: datetime,
     ) -> bool:
 
@@ -56,6 +57,7 @@ class JobRepository:
                 status=JobStatus.QUEUED,
                 uploaded_at=uploaded_at,
                 stages=stages,
+                current_stage=current_stage,
             )
             .returning(Job.id)
         )

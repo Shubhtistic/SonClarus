@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class SelectedStages(str, Enum):
+    DENOISE = "denoise"  # user choice
     SEPARATE = "separate"  # user choice
     TRANSCRIBE = "transcribe"  # user choice
     SUMMARIZE = "summarize"  # user choice, requires transcribe

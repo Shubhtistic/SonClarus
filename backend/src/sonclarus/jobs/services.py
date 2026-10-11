@@ -13,7 +13,7 @@ from src.sonclarus.shared.s3_client import (
 
 from .models import Job
 from .enums import JobStatus, StageName
-from .schemas import STAGE_MODELS, DenoiseJob, FileMetadataDict, UploadRequestSchema
+from .schemas import STAGE_MODELS, JOB_MODELS, FileMetadataDict, UploadRequestSchema
 from .repository import JobRepository
 from .exceptions import (
     InsufficientStorageError,
@@ -138,11 +138,10 @@ class JobService:
         orginal_file_metadata = FileMetadataDict.model_validate(orginal_file).to_db()
 
         # check what selected options are in this job and add pending to all
+        stage_names = [StageName(option.value) for option in job.selected_options]
 
-        # denoise always runs; selected_options never contains it
-        stage_names = [StageName.DENOISE] + [
-            StageName(option.value) for option in job.selected_options
-        ]
+        # first stage to publish, read now because job attributes expire after the commit below
+        first_stage = stage_names[0]
 
         stages = {
             name.value: STAGE_MODELS[name](
@@ -158,6 +157,7 @@ class JobService:
             file_metadata=orginal_file_metadata,
             stages=stages,
             uploaded_at=last_modified,
+            current_stage=first_stage,
         )
 
         if not confirmed:
@@ -181,18 +181,33 @@ class JobService:
         await db_session.commit()
 
         # publish to kafka
-        data = DenoiseJob(
+        # transcribe also needs is_seperated, False here because separate would have been the first stage otherwise
+        extra_fields = (
+            {"is_seperated": False} if first_stage == StageName.TRANSCRIBE else {}
+        )
+
+        # the first selected stage always reads the original upload
+        data = JOB_MODELS[first_stage](
             job_id=job_id,
             user_id=user_id,
             s3_bucket=orginal_file.s3_bucket,
             s3_key=orginal_file.s3_key,
-            requested_stage=StageName.DENOISE,
+            requested_stage=first_stage,
             input_filename=orginal_file.original_filename,
+            is_initial=True,
+            **extra_fields,
         ).model_dump(mode="json")
 
-        denoise_topic = (get_settings()).kafka.denoise_topic
+        if first_stage == StageName.DENOISE:
+            first_stage_topic = (get_settings()).kafka.denoise_topic
+        elif first_stage == StageName.SEPARATE:
+            first_stage_topic = (get_settings()).kafka.separate_topic
+        elif first_stage == StageName.TRANSCRIBE:
+            first_stage_topic = (get_settings()).kafka.transcribe_topic
+        elif first_stage == StageName.SUMMARIZE:
+            first_stage_topic = (get_settings()).kafka.summarize_topic
 
-        await KafkaProducer.send_job(data, denoise_topic)
+        await KafkaProducer.send_job(data, first_stage_topic)
 
         logger.info("Upload confirmed: job_id=%s size=%d", job_id_str, actual_size)
 

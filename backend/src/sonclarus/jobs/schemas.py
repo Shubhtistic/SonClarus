@@ -18,11 +18,18 @@ class UploadRequestSchema(BaseModel):
 
     @model_validator(mode="after")
     def validate_stage_dependencies(self) -> "UploadRequestSchema":
+        # an empty list means nothing to run
+        if not self.selected_options:
+            raise ValueError("select at least one stage")
         if (
             SelectedStages.SUMMARIZE in self.selected_options
             and SelectedStages.TRANSCRIBE not in self.selected_options
         ):
             raise ValueError("summarize requires transcribe to be selected")
+
+        # drop duplicates and store in pipeline order (enum member order)
+        order = list(SelectedStages)
+        self.selected_options = sorted(set(self.selected_options), key=order.index)
         return self
 
     @field_validator("filename")
@@ -55,7 +62,6 @@ class StageData(BaseModel):
     s3_key: Optional[str] = None
     size_bytes: Optional[int] = None
     content_type: Optional[str] = None
-    config: dict[str, Any] = Field(default_factory=dict)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
@@ -137,6 +143,7 @@ class StageJobBase(BaseModel):
     user_id: UUID
     s3_bucket: str
     s3_key: str
+    is_initial: bool
 
 
 class DenoiseJob(StageJobBase):
@@ -181,3 +188,12 @@ class TranscribeJob(StageJobBase):
 class SummarizeJob(StageJobBase):
     requested_stage: Literal[StageName.SUMMARIZE] = StageName.SUMMARIZE
     input_filename: str  # the transcript
+
+
+# stage -> message class, used to build the first message now and the next-stage ones later
+JOB_MODELS: dict[StageName, type[StageJobBase]] = {
+    StageName.DENOISE: DenoiseJob,
+    StageName.SEPARATE: SeparateJob,
+    StageName.TRANSCRIBE: TranscribeJob,
+    StageName.SUMMARIZE: SummarizeJob,
+}

@@ -92,8 +92,6 @@ class Job(SQLModel, table=True):
         ),
     )
 
-    # What the user asked for. Only user-facing choices, e.g. ["separate", "transcribe"].
-    # Denoise never appears here. Set once at request time.
     selected_options: list[SelectedStages] = Field(
         default_factory=list,
         sa_column=Column(
