@@ -1,4 +1,6 @@
 import logging
+from urllib.parse import quote
+
 import aioboto3
 from botocore.exceptions import ClientError
 from fastapi import HTTPException, status
@@ -36,22 +38,42 @@ def _s3_client():
     return boto_session.client("s3")
 
 
+def _s3_presign_client():
+    """Sign browser-facing links with the public endpoint when configured."""
+    endpoint = settings.aws.public_endpoint_url or settings.aws.endpoint_url
+    if endpoint:
+        return boto_session.client(
+            "s3",
+            endpoint_url=endpoint,
+            config=AioConfig(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+            ),
+        )
+    return boto_session.client("s3")
+
+
 async def generate_presigned_get(
-    user_id: str,
-    job_id: str,
-    filename: str,
-    stage_name: str,
+    object_key: str,
+    bucket_name: str | None = None,
     expires_in: int = 600,
+    filename: str | None = None,
 ) -> str:
-    """url for frontend to download files from s3"""
+    """Create a short-lived download URL for an exact S3 object."""
 
-    object_key = f"{user_id}/{job_id}/{stage_name}/{filename}"
-
-    async with _s3_client() as s3_client:
+    async with _s3_presign_client() as s3_client:
         try:
+            params = {
+                "Bucket": bucket_name or settings.aws.bucket_name,
+                "Key": object_key,
+            }
+            if filename:
+                params["ResponseContentDisposition"] = (
+                    f"attachment; filename*=UTF-8''{quote(filename)}"
+                )
             response = await s3_client.generate_presigned_url(
                 ClientMethod="get_object",
-                Params={"Bucket": settings.aws.bucket_name, "Key": object_key},
+                Params=params,
                 ExpiresIn=expires_in,
             )
             return response
@@ -70,7 +92,7 @@ async def generate_presigned_post(
 ) -> dict:
     """a secure url for frontend to upload file to s3"""
 
-    async with _s3_client() as s3_client:
+    async with _s3_presign_client() as s3_client:
         try:
             response = await s3_client.generate_presigned_post(
                 Bucket=settings.aws.bucket_name,
