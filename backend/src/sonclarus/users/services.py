@@ -1,10 +1,12 @@
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.sonclarus.jobs.services import JobService
+
 from .models import User
 from .repository import UserRepository
 from .exceptions import UserAlreadyExistsError, UserNotFoundError
-from .schemas import UserResponse
+from .schemas import UserResponse, UserStatsResponse
 
 
 class UserService:
@@ -40,3 +42,24 @@ class UserService:
             raise UserNotFoundError(identifier=str(user_id))
 
         return UserResponse.model_validate(user).model_dump()
+
+    @staticmethod
+    async def get_user_stats(
+        current_verified_user: dict, db_session: AsyncSession
+    ) -> dict:
+
+        try:
+            user_id = UUID(current_verified_user.get("user_id"))
+        except ValueError, TypeError:
+            raise
+
+        jobs_count = await JobService.get_jobs_count_for_user(
+            user_id=user_id, db_session=db_session
+        )
+
+        return UserStatsResponse(
+            jobs_completed=jobs_count.get("jobs_completed"),
+            jobs_processing=jobs_count.get("jobs_processing"),
+            storage_limit=current_verified_user.get("storage_limit"),
+            storage_used=current_verified_user.get("storage_used"),
+        ).model_dump()

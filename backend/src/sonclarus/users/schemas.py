@@ -18,3 +18,10 @@ class UserResponse(BaseModel):
     _validate_text = field_validator("first_name", "last_name", mode="before")(
         reject_blank_text
     )
+
+
+class UserStatsResponse(BaseModel):
+    jobs_completed: int
+    jobs_processing: int
+    storage_limit: int
+    storage_used: int

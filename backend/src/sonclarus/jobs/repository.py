@@ -4,12 +4,17 @@ from typing import Optional
 from uuid import UUID
 
 import orjson
-from sqlalchemy import delete, select, update
+from sqlalchemy import Row, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.sonclarus.jobs.models import Job
 from src.sonclarus.jobs.enums import JobStatus, StageName
-from src.sonclarus.shared.database import create, execute_query, get_one_by_query
+from src.sonclarus.shared.database import (
+    create,
+    execute_query,
+    get_all,
+    get_one_by_query,
+)
 from src.sonclarus.shared.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
@@ -99,3 +104,35 @@ class JobRepository:
             ttl_seconds,
             orjson.dumps(data),
         )
+
+    @staticmethod
+    async def count_processing_and_completed_jobs(
+        db_session: AsyncSession, user_id: UUID
+    ) -> Row:
+        qry = select(
+            func.count()
+            .filter(Job.status == JobStatus.PROCESSING)
+            .label("jobs_processing"),
+            func.count()
+            .filter(Job.status == JobStatus.COMPLETED)
+            .label("jobs_completed"),
+        ).where(
+            Job.user_id == user_id,
+            Job.deleted_at.is_(None),
+        )
+        res = await execute_query(query=qry, db_session=db_session)
+        return res.one()
+
+    @staticmethod
+    async def get_recent_jobs(
+        user_id: UUID, db_session: AsyncSession, limit: int
+    ) -> list:
+        """get paginated recent jobs"""
+        qry = (
+            select(Job)
+            .where(Job.user_id == user_id, Job.deleted_at.is_(None))
+            .order_by(Job.created_at.desc(), Job.id.desc())
+            .limit(limit)
+        )
+
+        return await get_all(stmt=qry, db_session=db_session)

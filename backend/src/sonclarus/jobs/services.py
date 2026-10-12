@@ -22,6 +22,7 @@ from .schemas import (
     FileMetadataDict,
     DownloadLinksResponse,
     MlStageResultEvent,
+    RecentJobsResponse,
     UploadRequestSchema,
     load_stage,
 )
@@ -519,3 +520,30 @@ class JobService:
             "job_id": job_id_str,
             "status": JobStatus.QUEUED,
         }
+
+    @staticmethod
+    async def get_jobs_count_for_user(
+        user_id: UUID, db_session: AsyncSession
+    ) -> dict[str, int]:
+
+        res_row = await JobRepository.count_processing_and_completed_jobs(
+            db_session=db_session, user_id=user_id
+        )
+
+        return {
+            "jobs_completed": res_row.jobs_completed,
+            "jobs_processing": res_row.jobs_processing,
+        }
+
+    @staticmethod
+    async def get_recent_jobs(
+        user_id: UUID, db_session: AsyncSession, limit: int = 10
+    ) -> list[dict]:
+
+        res = await JobRepository.get_recent_jobs(
+            user_id=user_id, db_session=db_session, limit=limit
+        )
+
+        return [
+            RecentJobsResponse.model_validate(r).model_dump(mode="json") for r in res
+        ]

@@ -159,6 +159,16 @@ class DownloadLinksResponse(BaseModel):
     files: list[DownloadFile]
 
 
+class RecentJobsResponse(BaseModel):
+    id: UUID
+    completed: bool
+    status: JobStatus
+    selected_options: list[SelectedStages]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ================================================================================================================================
 
 # --- Kafka Schemas ----

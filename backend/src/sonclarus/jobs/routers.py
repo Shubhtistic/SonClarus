@@ -1,10 +1,10 @@
 import logging
 from uuid import UUID
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 
 from src.sonclarus.shared.database import DbSessionDep
 from src.sonclarus.shared.responses import ApiResponse
-from src.sonclarus.auth.dependencies import VerifiedCurrentUserDep
+from src.sonclarus.auth.dependencies import CurrentUserDep, VerifiedCurrentUserDep
 from .schemas import UploadRequestSchema
 from .services import JobService
 from .exceptions import (
@@ -112,3 +112,21 @@ async def get_download_links(
         return ApiResponse.error(message="Job is not completed yet", code=409)
 
     return ApiResponse.success(message="Download links generated", data=data)
+
+
+@router.get("/recent-jobs")
+async def get_recent_jobs(
+    db_session: DbSessionDep,
+    current_user: CurrentUserDep,
+    limit: int = Query(default=10, ge=1, le=40),
+):
+    try:
+        user_id = UUID(current_user.get("user_id"))
+    except (TypeError, ValueError):
+        return ApiResponse.error(message="Invalid id format", code=422)
+
+    data = await JobService.get_recent_jobs(
+        user_id=user_id, db_session=db_session, limit=limit
+    )
+
+    return ApiResponse.success(message="Recent jobs fetched Successfully", data=data)
