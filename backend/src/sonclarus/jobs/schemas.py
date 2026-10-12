@@ -4,7 +4,7 @@ from typing import Any, Literal, Optional
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .enums import SelectedStages, StageName, StageStatus
+from .enums import JobStatus, SelectedStages, StageName, StageStatus
 from src.sonclarus.shared.utilities import reject_blank_text
 
 
@@ -129,9 +129,62 @@ class FileMetadataDict(BaseModel):
         return cls.model_validate(raw["original"])
 
 
+class DownloadFile(BaseModel):
+    """Safe dashboard fields for one downloadable file."""
+
+    stage: str
+    filename: str
+    size_bytes: Optional[int] = None
+    content_type: Optional[str] = None
+    download_url: str
+
+
+class DownloadJobSummary(BaseModel):
+    job_id: UUID
+    status: JobStatus
+    completed: bool
+    current_stage: Optional[StageName] = None
+    selected_stages: list[StageName]
+    failed_stage: Optional[StageName] = None
+    created_at: datetime
+    uploaded_at: Optional[datetime] = None
+    updated_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class DownloadLinksResponse(BaseModel):
+    """Job summary and one flat list of safe, temporary file links."""
+
+    job: DownloadJobSummary
+    files: list[DownloadFile]
+
+
 # ================================================================================================================================
 
 # --- Kafka Schemas ----
+
+
+class StageOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str = Field(min_length=1)
+    s3_key: str = Field(min_length=1)
+    size_bytes: int = Field(ge=0)
+    content_type: str = Field(min_length=1)
+    s3_bucket: str = Field(min_length=1)
+
+
+class MlStageResultEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: UUID
+    user_id: UUID
+    completed_stage: StageName
+    is_initial: bool
+    file_hash: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    stage_data: dict[str, Any]
+    outputs: list[StageOutput] = Field(min_length=1)
+    completed_at: datetime
 
 
 class StageJobBase(BaseModel):
