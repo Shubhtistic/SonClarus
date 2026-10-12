@@ -1,273 +1,269 @@
-<div align="center">
+# SonClarus
 
-<img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" />
-<img src="https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi&logoColor=white" />
-<img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white" />
-<img src="https://img.shields.io/badge/AWS-S3%20%7C%20RDS%20%7C%20ElastiCache-FF9900?style=flat-square&logo=amazon-web-services&logoColor=white" />
-<img src="https://img.shields.io/badge/NVIDIA-CUDA%20GPU-76B900?style=flat-square&logo=nvidia&logoColor=white" />
-<img src="https://img.shields.io/badge/License-MIT-22C55E?style=flat-square" />
+## Audio processing, from upload to insight
 
-# Sonclarus
+A self-hostable audio intelligence service for cleaning, separating, transcribing, and summarizing recordings.
 
-**Audio Intelligence Platform**
+**Backend:** Python 3.14, FastAPI, PostgreSQL, Redis, and Kafka.
 
-Upload a two-person recording. Get back a clean, speaker-labeled transcript and an AI-generated summary.
+**ML workers:** Python 3.11, DeepFilterNet, SepFormer, Faster Whisper, and Gemini.
 
-[What It Does](#what-it-does) · [How It Works](#how-it-works) · [Architecture](#architecture) · [Quickstart](#quickstart) · [API Reference](#api-reference) · [Future Improvements](#future-improvements-v2)
+[Backend guide](backend/README.md) | [ML guide](ml/README.md) | [Architecture diagram](architecture.svg)
 
-</div>
-
----
-
-## The Problem
-
-Recording a podcast interview, a research session, or a client call typically results in a single, messy audio file. Two people are talking, sometimes over each other, often with background noise from bad acoustics or external environments.
-
-Extracting a usable transcript traditionally requires either paying for commercial subscription services or manually listening and typing out the conversation.
-
-Sonclarus handles this automatically. It removes background noise, separates the two voices into distinct tracks, transcribes each speaker independently using Faster Whisper, and returns a labeled transcript with a generated summary.
+| Stage | Model or service |
+|---|---|
+| Denoise | DeepFilterNet |
+| Separate | SepFormer |
+| Transcribe | Faster Whisper |
+| Summarize | Gemini API |
 
 ---
 
-## What It Does
+## What SonClarus does
 
-Given a raw audio file of two people talking, Sonclarus returns a structured output:
+SonClarus accepts WAV audio through a direct-to-object-storage upload. The backend tracks each job, sends stage events through Kafka, and stores metadata and results in PostgreSQL. The ML service consumes work for four independent stages and uploads its artifacts to S3-compatible storage such as RustFS.
 
-```
-Speaker 1: So tell me about how you started the project.
-Speaker 2: It came out of a problem I kept hitting at work. Every meeting
-           ended with no clear record of who said what or what was decided.
-Speaker 1: How long did it take you to build the first version?
-Speaker 2: About three weeks for the core pipeline. The hard part was
-           getting speaker separation to work on noisy recordings.
+Select the stages needed for a job. Summarization requires transcription. When the selected stages finish, the backend marks the job complete and provides short-lived download links for the original and generated files.
 
-─────────────────────────────────────────────────────
-SUMMARY
-The conversation covered the origin of the project and the core
-engineering challenges in building the audio pipeline.
-─────────────────────────────────────────────────────
-```
-
-**Optimal Use Cases:** Podcast interviews, research interviews, client calls, sales calls, depositions, and 1-on-1 meetings.
-
-> **Note:** Sonclarus is engineered strictly for two-speaker separation. It is not designed for panel discussions or group calls involving three or more participants.
-
----
-
-## How It Works
-
-Every uploaded file passes through a strictly defined four-stage machine learning pipeline.
-
-```mermaid
-graph TD
-    Raw["Raw Audio (.wav)"] --> Denoise["1 · Denoise\nDeepFilterNet"]
-    Denoise -->|Cleaned Audio| Separate["2 · Separate\nSepFormer"]
-    Separate -->|Isolated Track A| TranscribeA["3 · Transcribe\nFaster Whisper"]
-    Separate -->|Isolated Track B| TranscribeB["3 · Transcribe\nFaster Whisper"]
-    TranscribeA --> Summarize["4 · Summarize\nGemini API"]
-    TranscribeB --> Summarize
-    Summarize --> Output["Labeled Transcript + Summary"]
-```
-
-| Stage | Model | Output |
-|---|---|---|
-| **Denoise** | DeepFilterNet | Clean audio with static, wind, and room echo removed. |
-| **Separate** | SepFormer (`wsj02mix`) | Two isolated voice tracks extracted from a single mixed waveform. |
-| **Transcribe** | Faster Whisper | High-speed, highly accurate text transcription per speaker. |
-| **Summarize** | Gemini API | A concise overview of the conversation's core topics. |
-
----
+> **Designed for two-speaker audio.** The separation model produces two speaker tracks; this pipeline is not intended for larger panels.
 
 ## Architecture
 
-Sonclarus relies on a decoupled architecture, separating the lightweight web server from the heavy GPU compute requirements.
+The API and ML workers are separate services. Kafka carries work between each selected stage, and a result consumer persists completed stage metadata before it queues the next stage.
 
-To bypass memory bloat on the API server, clients use **S3 Presigned URLs** to upload large audio files directly to AWS. To eliminate cloud GPU costs, the machine learning worker runs on a local machine equipped with an NVIDIA GPU. The worker communicates securely with the cloud by polling the AWS ElastiCache Redis queue directly.
+![SonClarus system architecture](./architecture.svg)
 
 ```mermaid
-graph TB
-    subgraph CLIENT["  Client Layer  "]
-        direction TB
-        UI["Client / Web UI"]
+flowchart LR
+    Client["Web client"]
+    subgraph Backend["Backend project"]
+        API["FastAPI API"]
+        Result["Kafka result consumer"]
+        DB[("PostgreSQL")]
+        Cache[("Redis")]
     end
-
-    subgraph CLOUD["  AWS Cloud  "]
-        direction TB
-        API["FastAPI Server"]
-        S3["S3 Bucket"]
-        Redis["ElastiCache Redis"]
-        RDS[("RDS PostgreSQL")]
+    subgraph Events["Shared Kafka"]
+        D["denoise topic"]
+        S["separate topic"]
+        T["transcribe topic"]
+        U["summarize topic"]
+        R["ML result topic"]
     end
-
-    subgraph WORKER["  Local GPU Worker  "]
-        direction TB
-        GPU["GPU Worker"]
-        ML["ML Pipeline"]
+    subgraph ML["ML service"]
+        W1["Denoise consumer"]
+        W2["Separate consumer"]
+        W3["Transcribe consumer"]
+        W4["Summarize consumer"]
     end
+    Store[("S3 / RustFS")]
 
-    UI -->|"① Request Presigned URL"| API
-    API -->|"② Return Temporary URL"| UI
-    UI -->|"③ Direct File Upload"| S3
-    UI -->|"④ Confirm Upload"| API
-    API -->|"⑤ Enqueue Task"| Redis
-
-    GPU -->|"⑥ Poll for Pending Jobs"| Redis
-    GPU -->|"⑦ Download Audio"| S3
-    GPU -->|"⑧ Execute"| ML
-    ML -->|"⑨ Save Transcript"| RDS
-
-    UI -->|"⑩ Poll Job Status"| API
-    API -->|"⑪ Fetch Completed Data"| RDS
+    Client -->|"request upload URL / confirm"| API
+    Client <-->|"auth, job data, download links"| API
+    Client -->|"upload WAV directly"| Store
+    API <--> DB
+    API <--> Cache
+    API -->|first selected stage| D
+    API --> S
+    API --> T
+    D --> W1
+    S --> W2
+    T --> W3
+    U --> W4
+    W1 --> Store
+    W2 --> Store
+    W3 --> Store
+    W4 --> Store
+    W1 --> R
+    W2 --> R
+    W3 --> R
+    W4 --> R
+    R --> Result
+    Result --> DB
+    Result -->|"enqueue selected next stage"| S
+    Result --> T
+    Result --> U
 ```
 
-### Architectural Decisions
+### Job lifecycle
 
-**S3 Presigned Uploads**
-The FastAPI server never touches the raw 50 MB audio files during upload. This prevents RAM exhaustion on the EC2 instance and speeds up transfer times.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Web client
+    participant API as FastAPI
+    participant DB as PostgreSQL
+    participant S3 as S3 / RustFS
+    participant K as Kafka
+    participant ML as Selected ML consumer
+    participant RC as Backend result consumer
 
-**ARQ Task Queue**
-Replaced Celery to avoid `asyncio` event loop conflicts with `asyncpg`. ARQ is natively asynchronous and integrates seamlessly with FastAPI.
+    User->>API: Request upload URL and selected stages
+    API->>DB: Create pending job and file metadata
+    API-->>User: Job ID and presigned upload form
+    User->>S3: Upload audio directly
+    User->>API: Confirm upload
+    API->>S3: Verify uploaded object
+    API->>DB: Save upload details and queued stage
+    API->>K: Publish first selected stage
+    K->>ML: Deliver stage message
+    ML->>S3: Download input and upload outputs
+    ML->>K: Publish completed stage and artifact metadata
+    K->>RC: Deliver ML result
+    RC->>DB: Save stage result and job progress
+    opt Another selected stage remains
+        RC->>K: Publish next stage
+    end
+    User->>API: Request completed job download links
+    API->>DB: Verify job belongs to user and is complete
+    API->>S3: Sign original and stage output URLs
+    API->>API: Cache download response in Redis for download TTL
+    API-->>User: Job details, file metadata, and download URLs
+```
 
-**Outbound-Only GPU Worker**
-The local GPU machine does not expose any open ports or use tunneling services like ngrok. It strictly makes outbound connections to the AWS Redis queue to pull jobs and to AWS RDS to write results, maintaining strict local network security.
+### Processing stages
 
----
+| Stage | Model or service | Result |
+|---|---|---|
+| **Denoise** | DeepFilterNet | A cleaned WAV file. |
+| **Separate** | SpeechBrain SepFormer (`wsj02mix`) | Two speaker WAV files. |
+| **Transcribe** | Faster Whisper | Transcript output. For separated input, the tracks are combined into one transcript. |
+| **Summarize** | Gemini API | A text summary of the transcript. |
 
-## Quickstart
+The backend publishes one stage at a time, following the selected order. The ML container can run all stage consumers together or be started with a single `--<stage>` option; see [the ML README](ml/README.md).
 
-### Prerequisites
+## Run locally
 
-- ![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white) Docker and Docker Compose
-- ![Git](https://img.shields.io/badge/-Git-F05032?style=flat-square&logo=git&logoColor=white) Git
-- ![NVIDIA](https://img.shields.io/badge/-NVIDIA%20GPU-76B900?style=flat-square&logo=nvidia&logoColor=white) A local machine with an NVIDIA GPU for the worker
+### Requirements
 
-### 1. Clone and Configure
+- Docker Engine and Docker Compose
+- Git
+- Enough CPU, memory, and disk for the selected ML models
+- Google AI Studio API key for the summary stage
+
+### 1. Configure the backend
 
 ```bash
-git clone https://github.com/Shubhtistic/SonClarus.git
-cd SonClarus
-cp .env.example .env
+cd backend
+cp example.env .env
 ```
 
-Populate your `.env` file according to this configuration:
+Set database, authentication, Kafka, object-storage, and model credentials in `backend/.env`. Keep secret values out of source control. `UPLOAD_URL_TTL_SECONDS` controls upload links. `DOWNLOAD_URL_TTL_SECONDS` controls download links and the Redis cache lifetime for the download response. The example sets both to 360 seconds.
 
-```env
-PROJECT_NAME="SonClarus"
+The example uses Docker service names (`postgres`, `redis`, and `kafka`) because the API and migration containers run inside Compose. If you run the backend directly on your host, use the published host ports instead (`localhost:5433` for PostgreSQL, `localhost:6380` for Redis, and `localhost:9092` for Kafka).
 
-# ── Database (AWS RDS) ─────────────────────────────────────────────────────────
-# Use the 'Endpoint' from your AWS RDS dashboard
-POSTGRES_SERVER=your-rds-endpoint-here.amazonaws.com
-POSTGRES_PORT=5432
-POSTGRES_USER=your_db_username
-POSTGRES_PASSWORD=your_db_password
-POSTGRES_DB=postgres                          # Default unless you created a specific DB
-
-# ── Cache (AWS ElastiCache Redis) ─────────────────────────────────────────────
-REDIS_URL=rediss://your-elasticache-primary-endpoint-here:6379/0
-REDIS_HOST=your-elasticache-primary-endpoint-here
-
-# ── Security ───────────────────────────────────────────────────────────────────
-# Generate a secret key: openssl rand -hex 32
-SECRET_KEY=your-64-character-hex-string-here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-# ── AWS Infrastructure ─────────────────────────────────────────────────────────
-AWS_ACCESS_KEY_ID=YOUR_IAM_ACCESS_KEY
-AWS_SECRET_ACCESS_KEY=YOUR_IAM_SECRET_KEY
-AWS_REGION=ap-south-1
-AWS_BUCKET_NAME=your-s3-bucket-name
-
-# ── Machine Learning & API ─────────────────────────────────────────────────────
-# Obtain from Google AI Studio or your chosen LLM provider
-GEMINI_API_KEY=your-gemini-api-key-here
-
-# ── Constraints ────────────────────────────────────────────────────────────────
-MAX_FILE_SIZE=52428800                        # 50 MB in bytes
-DOCS_ENDPOINT=anything-you-want
-```
-
-### 2. Start the Stack
+For local development, the compose setup expects shared external Docker networks. Create them once:
 
 ```bash
-docker compose -f compose.prod.yml up -d --build
+docker network create my-kafka-net
+docker network create my-storage-net
 ```
 
-> The startup sequence is strictly ordered: PostgreSQL and Redis boot first, followed by Alembic migrations. Once migrations pass health checks, the API and Worker initialize.
+### 2. Start Kafka and RustFS
 
----
+In separate terminals, from the `backend/` directory:
 
-## API Reference
+```bash
+docker compose -p kafka-local -f compose.kafka.yml up -d
+docker compose -p rustfs-local -f compose.rustfs.yml up -d
+```
 
-The Sonclarus API follows REST principles, accepts JSON payloads, and relies on OAuth2 with Bearer tokens for security.
+Create the bucket named by `AWS_BUCKET_NAME` in the RustFS console at [http://localhost:9001](http://localhost:9001). The example credentials are local placeholders; replace them with matching RustFS credentials before starting the services. For local RustFS, the backend uses `AWS_ENDPOINT_URL=http://rustfs:9000` on the Docker network, while browser-facing signed URLs use `AWS_PUBLIC_ENDPOINT_URL=http://localhost:9000`.
 
-### Authentication
+### 3. Start PostgreSQL, Redis, API, and result consumer
 
-| Method | Endpoint | Description |
+```bash
+docker compose up -d --build
+```
+
+The Compose project applies Alembic migrations before starting the API and Kafka result consumer. Kafka and RustFS are separate Compose projects and should be started first. Inspect service logs with:
+
+```bash
+docker compose logs -f backend result_consumer
+```
+
+The API is available at [http://localhost:8000](http://localhost:8000). Interactive API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs); health check: [http://localhost:8000/health](http://localhost:8000/health).
+
+### 4. Start the ML service
+
+Configure `ml/.env` using `ml/example.env`, ensuring the broker, topic names, client identity, and RustFS settings match the backend. Then run:
+
+```bash
+cd ../ml
+docker compose up --build
+```
+
+The ML process runs consumers for all four stage topics in parallel. The first run downloads model artifacts. The API and ML worker communicate through the shared Kafka and storage networks.
+
+## Backend API
+
+All API responses use a common JSON envelope with `message`, `status_code`, `data`, and `meta` fields. Authenticated routes use bearer access tokens; refresh tokens are stored in an HTTP-only cookie.
+
+| Method | Endpoint | Purpose |
 |---|---|---|
-| `POST` | `/register` | Creates a new user account. Accepts `email`, `password`, `full_name` (optional). |
-| `POST` | `/login` | Accepts standard OAuth2 form data (`username`, `password`) and returns a JWT access and refresh token. |
-| `POST` | `/refresh` | Exchanges a valid refresh token for a new access token. |
-| `POST` | `/logout` | Invalidates the current user session. |
+| `POST` | `/auth/signup` | Create an account. |
+| `POST` | `/auth/login` | Sign in and issue tokens. |
+| `POST` | `/auth/refresh` | Rotate the refresh token. |
+| `POST` | `/auth/logout` | End the current session. |
+| `GET` | `/users/me` | Return the authenticated user profile and storage usage. |
+| `POST` | `/jobs/request-upload` | Create a job and return a presigned upload form. |
+| `POST` | `/jobs/{job_id}/confirm-upload` | Verify the uploaded object and enqueue the first selected stage. |
+| `GET` | `/jobs/{job_id}/download-links` | Return completed job details, original metadata, and links for all saved outputs. |
+| `GET` | `/health` | Basic service health check. |
 
-### Ingestion
+### Download response
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/uploads/request` | Initiates the upload sequence. Evaluates the user's storage quota against the requested `file_size_bytes`. If valid, returns an S3 Presigned URL. Payload: `filename`, `file_size_bytes`. |
-| `POST` | `/uploads/confirm/{job_id}` | Called by the client after the file is successfully pushed to the S3 Presigned URL. Triggers the ARQ worker to begin the ML pipeline. |
+`GET /jobs/{job_id}/download-links` requires a valid token for an active, verified user and only returns data when the job belongs to that user and `completed` is `true`. It returns **404** for a missing or unowned job and **409** while processing is incomplete.
 
-### Job Status and Retrieval
+The response data is validated by `DownloadLinksResponse` in `backend/src/sonclarus/jobs/schemas.py` and serialized with Pydantic's `model_dump(mode="json")`. It includes the job timeline and selected stages, original filename/size/hash/storage metadata, stage status and artifact metadata, and a flat list of download links as well as per-stage files. Generated S3 URLs expire after `DOWNLOAD_URL_TTL_SECONDS`; Redis caches the JSON-safe response for the same duration.
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/jobs` | Fetches a paginated list of all jobs owned by the authenticated user, including summaries. Query params: `skip` (default: `0`), `limit` (default: `5`), `sort` (`asc`/`desc`). |
-| `GET` | `/status/{job_id}` | Returns the real-time processing stage of a specific job (e.g., `queued`, `denoising`, `transcribing`, `completed`). |
-| `GET` | `/download/{job_id}` | Generates a secure, temporary download URL for specific artifacts. Query param `stage` must be one of: `separated1`, `separated2`, `transcribe`. |
+## Configuration
 
----
+The backend settings are loaded with Pydantic Settings from `backend/src/sonclarus/shared/config.py`. `backend/example.env` lists the backend variables. The ML project has its own `ml/example.env` and [configuration notes](ml/README.md).
 
-## Future Improvements (V2)
-
-While Sonclarus V1 provides a stable, zero-cost production pipeline, the following architectural and feature upgrades are documented for implementation in Version 2.
-
-### 1. Job Recovery and Retries — The "Black Hole" Problem
-
-Currently, if a job fails due to an external timeout or temporary memory constraint, it is marked as `FAILED` and stranded.
-
-**V2 Solution:** Implement an isolated `arq` function that periodically sweeps the database for `FAILED` jobs. Because the pipeline is modular, this task will intelligently restart processing from the exact point of failure rather than starting over from the beginning.
-
-### 2. S3 Hard Delete Sync and Storage Limit Refund
-
-Currently, S3 storage continuously grows, and user quotas are depleted permanently upon upload.
-
-**V2 Solution:** Implement a background task tied to user deletion requests. When a user deletes a job via the API, the system will trigger `boto3.delete_object` to wipe both the raw upload and all processed outputs from S3. The system will then accurately refund the released byte capacity back to the user's `storage_used` metric in the database.
-
-### 3. Centralized Logging
-
-Currently, diagnosing a pipeline issue requires checking multiple disparate environments — AWS EC2 for the API, and the local terminal for the GPU worker.
-
-**V2 Solution:** Integrate a unified logging aggregator. All containers (API, Migrator, Worker) will stream logs to a centralized dashboard such as AWS CloudWatch or an ELK stack for synchronized observability.
-
-### 4. Confidence Highlighting
-
-**V2 Solution:** Leverage Faster Whisper's word-level confidence metrics to visually flag uncertain transcriptions in the UI, allowing users to easily locate and manually verify difficult audio segments.
-
-### 5. Video File Support
-
-**V2 Solution:** Expand the ingestion endpoint to accept `.mp4` and `.mov` files, utilizing a lightweight `ffmpeg` pre-processor to extract the raw audio payload before passing it to the standard processing queue.
-
----
-
-## The Team
-
-| Contributor | Role |
+| Setting | Purpose |
 |---|---|
-| **Shubham Pawar** | Core Developer |
-| **Mihir Revaskar** | Core Developer |
+| `POSTGRES_*` | PostgreSQL connection used by the API and result consumer. |
+| `REDIS_*` | Redis connection for auth revocation and cached download responses. |
+| `KAFKA_*` | Shared broker, four stage topics, result topic, and result consumer group. |
+| `AWS_*` | S3/RustFS credentials, bucket, internal endpoint, and optional public signing endpoint. |
+| `UPLOAD_URL_TTL_SECONDS` | Expiry for presigned upload links. |
+| `DOWNLOAD_URL_TTL_SECONDS` | Expiry for presigned download links and the download-link Redis cache. |
+| `JWT_SECRET_KEY` | Signing key for access tokens. Use a unique random secret outside local development. |
+| `GEMINI_API_KEY` | Credential for the summarize stage. |
+| `MAX_FILE_SIZE` | Maximum upload size in bytes. |
+| `ALLOWED_ORIGINS` | Browser origins allowed by the API CORS policy. |
 
----
+For AWS S3, leave `AWS_ENDPOINT_URL` and `AWS_PUBLIC_ENDPOINT_URL` empty. For RustFS, point `AWS_ENDPOINT_URL` at the service address reachable by the containers and `AWS_PUBLIC_ENDPOINT_URL` at the same service reachable by the browser. The public endpoint is only used when creating presigned URLs.
+
+## Repository map
+
+```text
+backend/
+├── src/sonclarus/
+│   ├── auth/       # Signup, login, token refresh, and verified-user dependencies
+│   ├── jobs/       # Upload lifecycle, Kafka job/result schemas, dashboard links
+│   ├── users/      # User profile and storage metadata
+│   ├── shared/     # Settings, database, Redis, Kafka, S3, response helpers
+│   ├── main.py     # FastAPI application
+│   └── run_consumer.py  # Backend ML-result consumer
+├── alembic/        # Database migrations
+├── compose*.yml    # Backend, shared Kafka, and RustFS local services
+└── example.env     # Backend environment template
+ml/
+├── src/sonclarus_ml/
+│   ├── denoise/ separate/ transcribe/ summarize/
+│   └── shared/    # Kafka consumers, S3, settings, and file hashing
+├── start_consumers.py
+└── compose.yml
+```
+
+## Development notes
+
+- Backend database changes are managed by Alembic. Compose runs migrations before the API and result consumer.
+- Kafka consumers manually commit messages after successful processing. Failed stage results remain eligible for retry.
+- The backend result consumer saves each completed stage and publishes the next selected stage. A completed final stage sets the job's `completed` flag.
+- The API and worker use direct S3 uploads/downloads so large audio files do not pass through the API process.
 
 ## License
 
-Distributed under the [MIT License](LICENSE).
+See [LICENSE](LICENSE) and [COPYRIGHT_NOTICE.txt](COPYRIGHT_NOTICE.txt).
