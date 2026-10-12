@@ -32,19 +32,20 @@ async def lifespan(app: FastAPI):
 
     logger.info("Application startup completed")
 
-    yield
+    try:
+        yield
+    finally:
+        logger.info("Application shutdown initiated")
 
-    logger.info("Application shutdown initiated")
+        logger.info("Stopping Kafka producer")
+        await KafkaProducer.stop()
+        logger.info("Kafka producer stopped successfully")
 
-    logger.info("Stopping Kafka producer")
-    await KafkaProducer.stop()
-    logger.info("Kafka producer stopped successfully")
+        logger.info("Closing Redis client")
+        await close_redis()
+        logger.info("Redis client closed successfully")
 
-    logger.info("Closing Redis client")
-    await close_redis()
-    logger.info("Redis client closed successfully")
-
-    logger.info("Application shutdown completed")
+        logger.info("Application shutdown completed")
 
 
 # --- create app ---
