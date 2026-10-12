@@ -1,1 +1,4 @@
 !uploads/
+
+# Local frontend API handoff; keep this file out of source control.
+API_SCHEMA.md
