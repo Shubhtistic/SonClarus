@@ -9,6 +9,7 @@ from .schemas import UploadRequestSchema
 from .services import JobService
 from .exceptions import (
     InsufficientStorageError,
+    JobNotCompletedError,
     JobNotFoundError,
     JobNotQueuedError,
     UploadNotFoundOnS3Error,
@@ -85,3 +86,29 @@ async def confirm_upload(
         )
 
     return ApiResponse.success(message="Upload confirmed", data=data)
+
+
+@router.get("/{job_id}/download-links")
+async def get_download_links(
+    job_id: str,
+    db_session: DbSessionDep,
+    current_user: VerifiedCurrentUserDep,
+):
+    try:
+        user_id = UUID(current_user.get("user_id"))
+        job_uuid = UUID(job_id)
+    except (TypeError, ValueError):
+        return ApiResponse.error(message="Invalid id format", code=422)
+
+    try:
+        data = await JobService.get_download_links(
+            db_session=db_session,
+            user_id=user_id,
+            job_id=job_uuid,
+        )
+    except JobNotFoundError:
+        return ApiResponse.error(message="Job not found", code=404)
+    except JobNotCompletedError:
+        return ApiResponse.error(message="Job is not completed yet", code=409)
+
+    return ApiResponse.success(message="Download links generated", data=data)
