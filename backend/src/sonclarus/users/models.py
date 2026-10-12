@@ -22,9 +22,9 @@ class User(SQLModel, table=True):
     is_verified: bool = Field(default=True)
 
     storage_limit: int = Field(
-        default=104857600,
-        sa_column=Column(BigInteger, nullable=False, server_default="104857600"),
-    )  # 100 MB
+        default=524288000,
+        sa_column=Column(BigInteger, nullable=False, server_default="524288000"),
+    )  # 500 MiB
 
     storage_used: int = Field(
         default=0,

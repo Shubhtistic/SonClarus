@@ -80,9 +80,7 @@ class JobRepository:
         return result.scalar_one_or_none() is not None
 
     @staticmethod
-    async def get_cached_download_links(
-        user_id: UUID, job_id: UUID
-    ) -> Optional[dict]:
+    async def get_cached_download_links(user_id: UUID, job_id: UUID) -> Optional[dict]:
         """Return cached download data, if it is still available."""
         redis = get_redis()
         raw = await redis.get(_download_links_cache_key(user_id, job_id))
