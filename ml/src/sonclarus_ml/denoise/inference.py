@@ -1,7 +1,13 @@
-import gc # gc -> cleanup objects no lonfer in us
+import gc  # gc -> cleanup objects no lonfer in us
 import logging
-from df.enhance import enhance, init_df # enhance -> run noise reduction, init_df -> load the model
-from df.io import load_audio, save_audio # read an audio file to tensor and write an audio tensor to file
+from df.enhance import (
+    enhance,
+    init_df,
+)  # enhance -> run noise reduction, init_df -> load the model
+from df.io import (
+    load_audio,
+    save_audio,
+)  # read an audio file to tensor and write an audio tensor to file
 from pathlib import Path
 
 import torch
@@ -12,9 +18,6 @@ from sonclarus_ml.shared.exceptions import (
     ModelLoadError,
 )
 from sonclarus_ml.shared.config import DenoiseSettings, get_settings
-
-
-
 
 logger = logging.getLogger(__name__)
 

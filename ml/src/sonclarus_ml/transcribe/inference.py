@@ -115,7 +115,9 @@ def run_transcription(
     # transcripts together and label each track so the source stays clear.
     has_separated_tracks = len(validated) > 1
     if has_separated_tracks:
-        logger.info("Transcribing %d separated tracks into one transcript", len(validated))
+        logger.info(
+            "Transcribing %d separated tracks into one transcript", len(validated)
+        )
     else:
         logger.info("Transcribing one audio file without speaker labels")
 

@@ -78,9 +78,7 @@ class AWSSettings(CommonSettings):
 
 class GeminiSettings(CommonSettings):
     api_key: SecretStr = Field(validation_alias="GEMINI_API_KEY")
-    model_name: str = Field(
-        default="gemini-3.8-flash", validation_alias="GEMINI_MODEL"
-    )
+    model_name: str = Field(default="gemini-3.8-flash", validation_alias="GEMINI_MODEL")
     timeout_seconds: int = Field(default=120, validation_alias="GEMINI_TIMEOUT_S")
 
 
@@ -109,9 +107,7 @@ class SeparateSettings(CommonSettings):
 
 class TranscribeSettings(CommonSettings):
     model_size: str = Field(default="base", validation_alias="WHISPER_MODEL_SIZE")
-    compute_type: str = Field(
-        default="int8", validation_alias="WHISPER_COMPUTE_TYPE"
-    )
+    compute_type: str = Field(default="int8", validation_alias="WHISPER_COMPUTE_TYPE")
     beam_size: int = Field(default=5, validation_alias="WHISPER_BEAM_SIZE")
     vad_filter: bool = Field(default=True, validation_alias="WHISPER_VAD_FILTER")
     vad_min_silence_duration_ms: int = Field(

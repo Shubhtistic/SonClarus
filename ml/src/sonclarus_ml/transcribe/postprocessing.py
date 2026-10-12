@@ -35,8 +35,7 @@ def postprocess(
     for segment in segments:
         speaker = f"{segment.speaker}: " if include_speaker_labels else ""
         lines.append(
-            f"[{segment.start:.2f} -> {segment.end:.2f}] "
-            f"{speaker}{segment.text}"
+            f"[{segment.start:.2f} -> {segment.end:.2f}] " f"{speaker}{segment.text}"
         )
     full_text = "\n".join(lines)
 
