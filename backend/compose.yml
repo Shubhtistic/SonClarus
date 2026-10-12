@@ -184,6 +184,31 @@ services:
       - my-kafka-net # remove if you add Kafka back to this compose file
 
 
+  # --- ML result consumer ---
+  result_consumer:
+    build:
+      context: .
+      target: runtime
+    command: ["python", "-m", "src.sonclarus.run_consumer"]
+    env_file:
+      - .env
+    volumes:
+      - ./src:/sonclarus/backend/src
+      - ./alembic:/sonclarus/backend/alembic
+      - ./alembic.ini:/sonclarus/backend/alembic.ini
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    healthcheck:
+      disable: true
+    networks:
+      - default
+      - my-storage-net # remove if you add RustFS to this compose file
+      - my-kafka-net # remove if you add Kafka back to this compose file
+
+
 volumes:
   sonclarus_pg_data:
   sonclarus_redis_data:
