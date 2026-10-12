@@ -1,1 +1,14 @@
 artifacts/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+output/
+pretrained_models/
+*.log
+.env
+decisions.md
+vram_calculation_readme.md
+data/

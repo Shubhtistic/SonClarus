@@ -1,0 +1,34 @@
+name: sonclarus-ml
+
+services:
+  ml:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${ML_KAFKA_BOOTSTRAP_SERVERS:-kafka:19092}
+      AWS_ENDPOINT_URL: ${ML_AWS_ENDPOINT_URL-http://rustfs:9000}
+      ML_WORK_DIR: /tmp/sonclarus-ml
+      ML_TORCH_NUM_THREADS: ${ML_TORCH_NUM_THREADS:-2}
+      SEPFORMER_SAVEDIR: /models/sepformer-wsj02mix
+      XDG_CACHE_HOME: /models/cache
+      HF_HOME: /models/huggingface
+      TORCH_HOME: /models/torch
+    volumes:
+      - ml-model-cache:/models
+    networks:
+      - my-kafka-net
+      - my-storage-net
+
+volumes:
+  ml-model-cache:
+
+networks:
+  my-kafka-net:
+    external: true
+  my-storage-net:
+    external: true
