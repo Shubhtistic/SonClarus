@@ -151,6 +151,16 @@ class KafkaSettings(CommonSettings):
         validation_alias="KAFKA_SUMMARIZE_TOPIC",
     )
 
+    ml_result_topic: str = Field(
+        default="ml-results",
+        validation_alias="KAFKA_ML_RESULT_TOPIC",
+    )
+
+    ml_result_group_id: str = Field(
+        default="sonclarus-backend-ml-results",
+        validation_alias="KAFKA_ML_RESULT_GROUP_ID",
+    )
+
     @model_validator(mode="after")
     def _check_sasl_credentials(self) -> "KafkaSettings":
         if self.security_protocol == "SASL_SSL" and not (
@@ -178,7 +188,14 @@ class AppSettings(CommonSettings):
         validation_alias="DOCS_ENDPOINT",
     )
 
-    upload_url_ttl_seconds: int = Field(validation_alias="UPLOAD_URL_TTL_SECONDS")
+    upload_url_ttl_seconds: int = Field(
+        gt=0,
+        validation_alias="UPLOAD_URL_TTL_SECONDS",
+    )
+    download_url_ttl_seconds: int = Field(
+        gt=0,
+        validation_alias="DOWNLOAD_URL_TTL_SECONDS",
+    )
 
 
 # --- Jwt Auth ---
@@ -245,6 +262,10 @@ class AWSSettings(CommonSettings):
     endpoint_url: str = Field(
         validation_alias="AWS_ENDPOINT_URL",
     )
+    public_endpoint_url: Optional[str] = Field(
+        default=None,
+        validation_alias="AWS_PUBLIC_ENDPOINT_URL",
+    )
 
 
 # --- Gemini / LLM ---
@@ -259,10 +280,6 @@ class FileSettings(CommonSettings):
     max_file_size: int = Field(
         default=50 * 1024 * 1024,
         validation_alias="MAX_FILE_SIZE",
-    )
-    s3_download_link_expiry_seconds: int = Field(
-        default=3600,
-        validation_alias="S3_DOWNLOAD_LINK_EXPIRY_SECONDS",
     )
 
 
