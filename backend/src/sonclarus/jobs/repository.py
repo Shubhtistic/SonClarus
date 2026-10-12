@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 from typing import Optional
 from uuid import UUID
 
@@ -8,12 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.sonclarus.jobs.models import Job
 from src.sonclarus.jobs.enums import JobStatus, StageName
-from src.sonclarus.shared.database import create, execute_query
+from src.sonclarus.shared.database import create, execute_query, get_one_by_query
 from src.sonclarus.shared.redis_client import get_redis
 
+logger = logging.getLogger(__name__)
 
-def _download_links_cache_key(job_id: str) -> str:
-    return f"download_links:{job_id}"
+
+def _download_links_cache_key(user_id: UUID, job_id: UUID) -> str:
+    return f"jobs:download-links:{user_id}:{job_id}"
 
 
 class JobRepository:
@@ -26,7 +29,19 @@ class JobRepository:
         db_session: AsyncSession, job_id: UUID, user_id: UUID
     ) -> Optional[Job]:
         qry = select(Job).where(Job.id == job_id, Job.user_id == user_id)
-        result = await db_session.execute(qry)
+        return await get_one_by_query(q=qry, db_session=db_session)
+
+    @staticmethod
+    async def get_job_for_ml_result(
+        db_session: AsyncSession, job_id: UUID, user_id: UUID
+    ) -> Optional[Job]:
+        """Load and lock a job before applying one ML stage result."""
+        qry = (
+            select(Job)
+            .where(Job.id == job_id, Job.user_id == user_id)
+            .with_for_update()
+        )
+        result = await execute_query(query=qry, db_session=db_session)
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -65,22 +80,24 @@ class JobRepository:
         return result.scalar_one_or_none() is not None
 
     @staticmethod
-    async def get_cached_download_links(job_id: str) -> Optional[dict]:
-        """Return cached download links dict or None if not cached."""
+    async def get_cached_download_links(
+        user_id: UUID, job_id: UUID
+    ) -> Optional[dict]:
+        """Return cached download data, if it is still available."""
         redis = get_redis()
-        raw = await redis.get(_download_links_cache_key(job_id))
+        raw = await redis.get(_download_links_cache_key(user_id, job_id))
         if raw is None:
             return None
         return orjson.loads(raw)
 
     @staticmethod
     async def set_cached_download_links(
-        job_id: str, links: dict, ttl_seconds: int
+        user_id: UUID, job_id: UUID, data: dict, ttl_seconds: int
     ) -> None:
-        """Cache download links dict with the same TTL as the presigned URLs."""
+        """Cache the signed links until their S3 signatures expire."""
         redis = get_redis()
         await redis.setex(
-            _download_links_cache_key(job_id),
+            _download_links_cache_key(user_id, job_id),
             ttl_seconds,
-            orjson.dumps(links),
+            orjson.dumps(data),
         )
