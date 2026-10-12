@@ -12,6 +12,13 @@ class JobNotFoundError(Exception):
         self.job_id = job_id
 
 
+class JobNotCompletedError(Exception):
+    """raised when download links are requested before a job has completed"""
+
+    def __init__(self, job_id: str):
+        self.job_id = job_id
+
+
 class JobNotQueuedError(Exception):
     """raised when a job is not in PENDING_UPLOAD state at confirm time"""
 
