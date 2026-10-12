@@ -1,0 +1,19 @@
+# Resolved and install-checked with CPython 3.11 on Linux x86-64.
+# Keep Torch and TorchAudio on the same release.
+torch==2.8.0
+torchaudio==2.8.0
+faster-whisper==1.2.1
+DeepFilterNet==0.5.6
+speechbrain==1.1.1
+google-genai==2.29.0
+aioboto3==15.5.0
+aiobotocore==2.25.1
+aiokafka==0.14.0
+orjson==3.13.0
+pydantic==2.14.0
+pydantic-settings[dotenv]==2.15.0
+numpy==1.26.4
+protobuf==5.29.6
+# DeepFilterNet requires packaging<24; this wheel release works with that range.
+wheel==0.45.1
+black==26.10.1
