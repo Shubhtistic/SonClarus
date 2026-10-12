@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820" role="img" aria-labelledby="title description">
+  <title id="title">SonClarus project architecture</title>
+  <desc id="description">Client uploads audio to S3-compatible storage, the backend schedules Kafka stages, four ML consumers process artifacts, and the backend result consumer updates PostgreSQL.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#14243b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#49d7c3"/>
+      <stop offset="1" stop-color="#77a8ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#020617" flood-opacity=".3"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#9bb0ca"/>
+    </marker>
+    <marker id="arrowMint" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#49d7c3"/>
+    </marker>
+    <style>
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+      .title { fill: #f4f8ff; font-size: 34px; font-weight: 750; letter-spacing: .2px; }
+      .subtitle { fill: #a7b8ce; font-size: 15px; }
+      .group { fill: #e7eef8; font-size: 15px; font-weight: 700; letter-spacing: 1.3px; }
+      .node-title { fill: #f4f8ff; font-size: 16px; font-weight: 700; }
+      .node-sub { fill: #adbed2; font-size: 12px; }
+      .small { fill: #b6c6d8; font-size: 11px; }
+      .line-label { fill: #b9cadc; font-size: 11px; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="820" rx="28" fill="url(#bg)"/>
+  <circle cx="1120" cy="80" r="150" fill="#264b70" opacity=".15"/>
+  <circle cx="90" cy="720" r="190" fill="#22b8a5" opacity=".08"/>
+  <path d="M44 127H1236" stroke="url(#accent)" stroke-width="2" opacity=".8"/>
+  <text x="64" y="72" class="title">SonClarus · system architecture</text>
+  <text x="66" y="101" class="subtitle">Kafka-driven audio pipeline · direct object storage · independently running stage consumers</text>
+
+  <!-- Client -->
+  <g filter="url(#shadow)">
+    <rect x="58" y="300" width="190" height="142" rx="18" fill="#1c3150" stroke="#426287"/>
+    <rect x="77" y="320" width="38" height="38" rx="11" fill="#284c6b"/>
+    <path d="M89 331h14v15H89zM86 350h20" fill="none" stroke="#83d9d0" stroke-width="2" stroke-linecap="round"/>
+    <text x="77" y="384" class="node-title">Web client</text>
+    <text x="77" y="406" class="node-sub">Auth · upload · job dashboard</text>
+    <text x="77" y="424" class="node-sub">Download completed artifacts</text>
+  </g>
+
+  <!-- Backend boundary -->
+  <rect x="292" y="160" width="316" height="466" rx="22" fill="#14263b" stroke="#35516d" stroke-width="1.5"/>
+  <text x="316" y="193" class="group">BACKEND SERVICES</text>
+  <g filter="url(#shadow)">
+    <rect x="316" y="218" width="268" height="102" rx="15" fill="#213d5a" stroke="#4d7598"/>
+    <circle cx="342" cy="250" r="12" fill="#49d7c3" opacity=".9"/>
+    <path d="M337 250h10M342 245v10" stroke="#10243a" stroke-width="2"/>
+    <text x="365" y="250" class="node-title">FastAPI</text>
+    <text x="337" y="278" class="node-sub">Auth · upload confirmation · dashboard API</text>
+    <text x="337" y="298" class="node-sub">Presigned S3 URLs · response cache</text>
+
+    <rect x="316" y="347" width="268" height="96" rx="15" fill="#213d5a" stroke="#4d7598"/>
+    <circle cx="342" cy="379" r="12" fill="#77a8ff" opacity=".9"/>
+    <path d="M336 379h12M342 373v12" stroke="#10243a" stroke-width="2"/>
+    <text x="365" y="379" class="node-title">ML result consumer</text>
+    <text x="337" y="408" class="node-sub">Validates result · saves stage metadata</text>
+    <text x="337" y="427" class="node-sub">Queues the next selected stage</text>
+
+    <rect x="316" y="470" width="126" height="112" rx="14" fill="#1b344d" stroke="#3e637f"/>
+    <ellipse cx="379" cy="496" rx="22" ry="8" fill="none" stroke="#91b5d5" stroke-width="2"/>
+    <path d="M357 496v21c0 5 10 9 22 9s22-4 22-9v-21M357 506c0 5 10 9 22 9s22-4 22-9" fill="none" stroke="#91b5d5" stroke-width="2"/>
+    <text x="337" y="550" class="node-title">PostgreSQL</text>
+    <text x="337" y="569" class="node-sub">Users · jobs · stage data</text>
+
+    <rect x="458" y="470" width="126" height="112" rx="14" fill="#1b344d" stroke="#3e637f"/>
+    <path d="M493 495h55v29h-55zM499 489h43M499 530h43" fill="none" stroke="#f2a365" stroke-width="2" stroke-linecap="round"/>
+    <text x="480" y="550" class="node-title">Redis</text>
+    <text x="480" y="569" class="node-sub">Cache · token revocation</text>
+  </g>
+  <path d="M449 443v22" stroke="#9bb0ca" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M504 320v133" stroke="#9bb0ca" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Kafka -->
+  <g filter="url(#shadow)">
+    <rect x="678" y="218" width="245" height="365" rx="20" fill="#202a3d" stroke="#846347" stroke-width="1.5"/>
+    <text x="704" y="253" class="group">SHARED KAFKA</text>
+    <text x="704" y="277" class="node-sub">Stage work and results</text>
+    <rect x="704" y="300" width="193" height="45" rx="11" fill="#3b3340" stroke="#b0835b"/>
+    <circle cx="723" cy="322" r="6" fill="#ffbf76"/><text x="740" y="327" class="node-title" style="font-size:14px">denoise</text>
+    <rect x="704" y="358" width="193" height="45" rx="11" fill="#3b3340" stroke="#b0835b"/>
+    <circle cx="723" cy="380" r="6" fill="#ffbf76"/><text x="740" y="385" class="node-title" style="font-size:14px">separate</text>
+    <rect x="704" y="416" width="193" height="45" rx="11" fill="#3b3340" stroke="#b0835b"/>
+    <circle cx="723" cy="438" r="6" fill="#ffbf76"/><text x="740" y="443" class="node-title" style="font-size:14px">transcribe</text>
+    <rect x="704" y="474" width="193" height="45" rx="11" fill="#3b3340" stroke="#b0835b"/>
+    <circle cx="723" cy="496" r="6" fill="#ffbf76"/><text x="740" y="501" class="node-title" style="font-size:14px">summarize</text>
+    <rect x="704" y="532" width="193" height="31" rx="10" fill="#183c48" stroke="#49b8ad"/>
+    <text x="722" y="553" class="node-title" style="font-size:13px">sonclarus-results</text>
+  </g>
+
+  <!-- ML consumers -->
+  <rect x="964" y="160" width="262" height="304" rx="22" fill="#142d35" stroke="#377f76" stroke-width="1.5"/>
+  <text x="988" y="193" class="group">ML STAGE CONSUMERS</text>
+  <text x="988" y="216" class="node-sub">Run concurrently in the ML service</text>
+  <g filter="url(#shadow)">
+    <rect x="988" y="238" width="214" height="43" rx="11" fill="#1c4549" stroke="#3e968d"/><circle cx="1008" cy="259" r="6" fill="#63e0ca"/><text x="1025" y="264" class="node-title" style="font-size:14px">Denoise · DeepFilterNet</text>
+    <rect x="988" y="291" width="214" height="43" rx="11" fill="#1c4549" stroke="#3e968d"/><circle cx="1008" cy="312" r="6" fill="#63e0ca"/><text x="1025" y="317" class="node-title" style="font-size:14px">Separate · SepFormer</text>
+    <rect x="988" y="344" width="214" height="43" rx="11" fill="#1c4549" stroke="#3e968d"/><circle cx="1008" cy="365" r="6" fill="#63e0ca"/><text x="1025" y="370" class="node-title" style="font-size:14px">Transcribe · Whisper</text>
+    <rect x="988" y="397" width="214" height="43" rx="11" fill="#1c4549" stroke="#3e968d"/><circle cx="1008" cy="418" r="6" fill="#63e0ca"/><text x="1025" y="423" class="node-title" style="font-size:14px">Summarize · Gemini</text>
+  </g>
+
+  <!-- Storage -->
+  <g filter="url(#shadow)">
+    <rect x="964" y="520" width="262" height="120" rx="18" fill="#342f4a" stroke="#8275b5" stroke-width="1.5"/>
+    <path d="M1000 550h48v39h-48zM1007 543h34M1007 596h34" fill="none" stroke="#c2b4ff" stroke-width="2" stroke-linecap="round"/>
+    <text x="1070" y="561" class="node-title">S3 / RustFS</text>
+    <text x="1070" y="584" class="node-sub">Original audio + stage artifacts</text>
+    <text x="1000" y="620" class="small">Internal endpoint for services · public URL for browsers</text>
+  </g>
+
+  <!-- Connections -->
+  <path d="M248 333H280V269H306" fill="none" stroke="#9bb0ca" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="252" y="319" class="line-label">API calls</text>
+  <path d="M248 413H264V580H954V592" fill="none" stroke="#49d7c3" stroke-width="2" marker-end="url(#arrowMint)"/>
+  <text x="635" y="573" class="line-label">direct upload / signed downloads</text>
+  <path d="M584 269H668" fill="none" stroke="#9bb0ca" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="594" y="255" class="line-label">publish selected stage</text>
+  <path d="M678 548H620V395H594" fill="none" stroke="#77a8ff" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="611" y="384" class="line-label">results</text>
+  <path d="M923 322H954" fill="none" stroke="#49d7c3" stroke-width="2" marker-end="url(#arrowMint)"/>
+  <text x="925" y="307" class="line-label">stage topics</text>
+  <path d="M954 430H938V548H908" fill="none" stroke="#77a8ff" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="910" y="480" class="line-label">result topic</text>
+  <path d="M1095 464V508" fill="none" stroke="#9bb0ca" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="1107" y="493" class="line-label">read / write files</text>
+
+  <text x="64" y="776" class="small">SonClarus · development architecture · API, result consumer, Kafka, ML workers, PostgreSQL, Redis, and S3-compatible storage</text>
+</svg>
