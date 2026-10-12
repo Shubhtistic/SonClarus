@@ -10,38 +10,7 @@ The ML service runs audio-processing stages as independent Kafka consumers. Each
 
 The backend owns users, job state, selected-stage order, and database writes. The ML service owns model inference and artifact creation. It does not connect to PostgreSQL.
 
-```mermaid
-flowchart LR
-    subgraph Kafka["Shared Kafka"]
-        D["denoise"]
-        S["separate"]
-        T["transcribe"]
-        U["summarize"]
-        R["sonclarus-results"]
-    end
-    subgraph Workers["ML processes"]
-        WD["Denoise worker"]
-        WS["Separate worker"]
-        WT["Transcribe worker"]
-        WU["Summarize worker"]
-    end
-    Store[("S3 or RustFS")]
-    Backend["Backend result consumer"]
-
-    D --> WD
-    S --> WS
-    T --> WT
-    U --> WU
-    WD --> Store
-    WS --> Store
-    WT --> Store
-    WU --> Store
-    WD --> R
-    WS --> R
-    WT --> R
-    WU --> R
-    R --> Backend
-```
+![SonClarus ML processing pipeline](pipeline.svg)
 
 Each stage has its own process, Kafka group, and model lifecycle. With no flags, the launcher runs all four consumers in parallel. Pass one or more stage flags to run only those consumers.
 

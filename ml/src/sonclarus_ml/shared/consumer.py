@@ -5,6 +5,7 @@ import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
+from time import perf_counter
 from typing import Any, Callable
 from uuid import UUID
 
@@ -116,6 +117,7 @@ async def process_message(
     raw_value: bytes,
     inference: Callable[..., dict[str, Any]],
 ) -> None:
+    processing_started = perf_counter()
     message = StageMessage.model_validate_json(raw_value)
     if message.requested_stage != stage:
         raise ValueError(
@@ -146,39 +148,82 @@ async def process_message(
         output_dir.mkdir(parents=True)
 
         local_inputs: list[Path] = []
+        download_started = perf_counter()
         for filename in filenames:
             input_path = input_dir / Path(filename).name
+            step_started = perf_counter()
             await s3.download_file(
                 _object_key(message.s3_key, filename),
                 str(input_path),
                 bucket_name=bucket,
             )
             local_inputs.append(input_path)
+            input_size = input_path.stat().st_size
+            logger.info(
+                "Input downloaded (stage=%s job_id=%s filename=%s size_bytes=%d "
+                "elapsed_seconds=%.3f total_elapsed_seconds=%.3f)",
+                stage,
+                job_id,
+                input_path.name,
+                input_size,
+                perf_counter() - step_started,
+                perf_counter() - processing_started,
+            )
+        download_elapsed = perf_counter() - download_started
+        input_sizes = {path.name: path.stat().st_size for path in local_inputs}
+        logger.info(
+            "All inputs downloaded (stage=%s job_id=%s input_sizes_bytes=%s "
+            "download_elapsed_seconds=%.3f total_elapsed_seconds=%.3f)",
+            stage,
+            job_id,
+            input_sizes,
+            download_elapsed,
+            perf_counter() - processing_started,
+        )
 
+        hash_started = perf_counter()
         file_hash = compute_file_hash(local_inputs[0]) if message.is_initial else None
+        hash_elapsed = perf_counter() - hash_started
         primary_input = local_inputs[0]
+        inference_started = perf_counter()
         artifact_paths = await asyncio.to_thread(
             _artifact_paths, stage, primary_input, output_dir, message, inference
         )
+        inference_elapsed = perf_counter() - inference_started
         if not artifact_paths or any(not path.is_file() for path in artifact_paths):
             raise RuntimeError(f"{stage} did not produce all expected output files")
 
         prefix = f"{user_id}/{job_id}/{stage}"
         artifacts: list[dict[str, Any]] = []
+        upload_started = perf_counter()
         for path in artifact_paths:
             filename = path.name
             key = str(PurePosixPath(prefix) / filename)
+            output_size = path.stat().st_size
+            step_started = perf_counter()
             await s3.upload_file(str(path), key, bucket_name=bucket)
+            upload_step_elapsed = perf_counter() - step_started
+            logger.info(
+                "Output uploaded (stage=%s job_id=%s filename=%s size_bytes=%d "
+                "elapsed_seconds=%.3f total_elapsed_seconds=%.3f)",
+                stage,
+                job_id,
+                filename,
+                output_size,
+                upload_step_elapsed,
+                perf_counter() - processing_started,
+            )
             artifacts.append(
                 {
                     "filename": filename,
                     "s3_key": key,
-                    "size_bytes": path.stat().st_size,
+                    "size_bytes": output_size,
                     "content_type": mimetypes.guess_type(filename)[0]
                     or "application/octet-stream",
                     "s3_bucket": bucket,
                 }
             )
+        upload_elapsed = perf_counter() - upload_started
 
         result_event = {
             "job_id": job_id,
@@ -190,12 +235,26 @@ async def process_message(
             "outputs": artifacts,
             "completed_at": datetime.now(timezone.utc).isoformat(),
         }
+        publish_started = perf_counter()
         await KafkaProducer.send_job(result_event, settings.kafka.result_topic)
+        publish_elapsed = perf_counter() - publish_started
+        output_sizes = {item["filename"]: item["size_bytes"] for item in artifacts}
         logger.info(
-            "Stage completed (stage=%s job_id=%s artifacts=%d)",
+            "Stage completed (stage=%s job_id=%s input_sizes_bytes=%s "
+            "output_sizes_bytes=%s hash_elapsed_seconds=%.3f "
+            "download_elapsed_seconds=%.3f inference_elapsed_seconds=%.3f "
+            "upload_elapsed_seconds=%.3f result_publish_elapsed_seconds=%.3f "
+            "total_elapsed_seconds=%.3f)",
             stage,
             job_id,
-            len(artifacts),
+            input_sizes,
+            output_sizes,
+            hash_elapsed,
+            download_elapsed,
+            inference_elapsed,
+            upload_elapsed,
+            publish_elapsed,
+            perf_counter() - processing_started,
         )
 
 
@@ -233,16 +292,32 @@ async def run_consumer(stage: str, inference: Callable[..., dict[str, Any]]) -> 
         logger.info("ML consumer started (stage=%s topic=%s)", stage, topic)
         while True:
             record = await consumer.getone()
+            processing_started = perf_counter()
             try:
                 await process_message(stage, record.value, inference)
+                process_elapsed = perf_counter() - processing_started
+                commit_started = perf_counter()
                 await consumer.commit()
-            except Exception:
-                logger.exception(
-                    "Message processing failed; leaving it uncommitted "
-                    "(stage=%s partition=%d offset=%d)",
+                commit_elapsed = perf_counter() - commit_started
+                logger.info(
+                    "Kafka message committed (stage=%s partition=%d offset=%d "
+                    "process_elapsed_seconds=%.3f commit_elapsed_seconds=%.3f "
+                    "total_elapsed_seconds=%.3f)",
                     stage,
                     record.partition,
                     record.offset,
+                    process_elapsed,
+                    commit_elapsed,
+                    perf_counter() - processing_started,
+                )
+            except Exception:
+                logger.exception(
+                    "Message processing failed; leaving it uncommitted "
+                    "(stage=%s partition=%d offset=%d elapsed_seconds=%.3f)",
+                    stage,
+                    record.partition,
+                    record.offset,
+                    perf_counter() - processing_started,
                 )
                 consumer.seek(
                     TopicPartition(record.topic, record.partition), record.offset
