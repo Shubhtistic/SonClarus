@@ -15,6 +15,39 @@ class CommonSettings(BaseSettings):
     )
 
 
+# --- App settings ---
+class AppSettings(CommonSettings):
+    project_name: str = Field(
+        default="SonClarus",
+        validation_alias="PROJECT_NAME",
+    )
+
+    version: str = Field(
+        validation_alias="PROJECT_VERSION",
+    )
+
+    docs_endpoint: str = Field(
+        validation_alias="DOCS_ENDPOINT",
+    )
+
+    upload_url_ttl_seconds: int = Field(
+        gt=0,
+        validation_alias="UPLOAD_URL_TTL_SECONDS",
+    )
+    download_url_ttl_seconds: int = Field(
+        gt=0,
+        validation_alias="DOWNLOAD_URL_TTL_SECONDS",
+    )
+
+    environment: str = Field(
+        validation_alias="ENVIRONMENT",
+    )
+
+    @property
+    def is_live(self) -> bool:
+        return self.environment.strip().lower() == "live"
+
+
 # --- Postgres ---
 class PostgresSettings(CommonSettings):
     postgres_server: str = Field(
@@ -173,48 +206,19 @@ class KafkaSettings(CommonSettings):
         return self
 
 
-# --- App settings ---
-class AppSettings(CommonSettings):
-    project_name: str = Field(
-        default="SonClarus",
-        validation_alias="PROJECT_NAME",
-    )
-
-    version: str = Field(
-        validation_alias="PROJECT_VERSION",
-    )
-
-    docs_endpoint: str = Field(
-        validation_alias="DOCS_ENDPOINT",
-    )
-
-    upload_url_ttl_seconds: int = Field(
-        gt=0,
-        validation_alias="UPLOAD_URL_TTL_SECONDS",
-    )
-    download_url_ttl_seconds: int = Field(
-        gt=0,
-        validation_alias="DOWNLOAD_URL_TTL_SECONDS",
-    )
-
-
 # --- Jwt Auth ---
 class JwtSettings(CommonSettings):
     secret_key: str = Field(validation_alias="JWT_SECRET_KEY")
     algorithm: str = Field(
-        default="HS256",
         validation_alias="ALGORITHM",
     )
     access_token_expire_minutes: int = Field(
-        default=30,
         validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES",
     )
     refresh_token_expire_days: int = Field(
-        default=30,
         validation_alias="REFRESH_TOKEN_EXPIRE_DAYS",
     )
     refresh_grace_period_minutes: int = Field(
-        default=5,
         validation_alias="REFRESH_GRACE_PERIOD_MINUTES",
     )
 
@@ -278,8 +282,28 @@ class GeminiSettings(CommonSettings):
 # --- File Upload ---
 class FileSettings(CommonSettings):
     max_file_size: int = Field(
-        default=50 * 1024 * 1024,
         validation_alias="MAX_FILE_SIZE",
+    )
+
+
+# --- RustFS bucket bootstrap (non-live only) ---
+class RustFsSettings(CommonSettings):
+    cors_allowed_origins: Optional[list[str]] = Field(
+        validation_alias="BUCKET_CORS_ORIGINS",
+    )
+    cors_allowed_methods: list[str] = Field(
+        default=["GET", "HEAD", "PUT", "POST", "DELETE"],
+        validation_alias="BUCKET_CORS_METHODS",
+    )
+    cors_allowed_headers: list[str] = Field(
+        validation_alias="BUCKET_CORS_HEADERS",
+    )
+    cors_expose_headers: list[str] = Field(
+        validation_alias="BUCKET_CORS_EXPOSE_HEADERS",
+    )
+    cors_max_age_seconds: int = Field(
+        default=3600,
+        validation_alias="BUCKET_CORS_MAX_AGE",
     )
 
 
@@ -294,6 +318,7 @@ class Settings(CommonSettings):
     aws: AWSSettings = Field(default_factory=AWSSettings)
     gemini: GeminiSettings = Field(default_factory=GeminiSettings)
     file: FileSettings = Field(default_factory=FileSettings)
+    rustfs: RustFsSettings = Field(default_factory=RustFsSettings)
 
 
 @lru_cache

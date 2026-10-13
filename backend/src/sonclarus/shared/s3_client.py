@@ -38,6 +38,50 @@ def _s3_client():
     return boto_session.client("s3")
 
 
+async def ensure_bucket_and_cors() -> None:
+    """Non-live only: create the bucket if missing and apply bucket CORS rules."""
+    if settings.app.is_live:
+        logger.info("Live environment: skipping bucket/CORS bootstrap")
+        return
+
+    cfg = settings.rustfs
+    origins = cfg.cors_allowed_origins
+    bucket = settings.aws.bucket_name
+
+    try:
+        async with _s3_client() as s3_client:
+            try:
+                await s3_client.head_bucket(Bucket=bucket)
+            except ClientError as e:
+                if e.response["Error"]["Code"] not in (
+                    "404",
+                    "NoSuchBucket",
+                    "NotFound",
+                ):
+                    raise
+                await s3_client.create_bucket(Bucket=bucket)
+                logger.info("Created bucket %s", bucket)
+
+            await s3_client.put_bucket_cors(
+                Bucket=bucket,
+                CORSConfiguration={
+                    "CORSRules": [
+                        {
+                            "AllowedOrigins": origins,
+                            "AllowedMethods": cfg.cors_allowed_methods,
+                            "AllowedHeaders": cfg.cors_allowed_headers,
+                            "ExposeHeaders": cfg.cors_expose_headers,
+                            "MaxAgeSeconds": cfg.cors_max_age_seconds,
+                        }
+                    ]
+                },
+            )
+            logger.info("Applied bucket CORS on %s for %s", bucket, origins)
+    except Exception:
+        # Don't block local startup if RustFS is down, but make it visible
+        logger.exception("Bucket/CORS bootstrap failed")
+
+
 def _s3_presign_client():
     """Sign browser-facing links with the public endpoint when configured."""
     endpoint = settings.aws.public_endpoint_url or settings.aws.endpoint_url

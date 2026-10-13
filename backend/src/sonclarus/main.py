@@ -5,6 +5,7 @@ from scalar_fastapi import get_scalar_api_reference
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.sonclarus.shared.s3_client import ensure_bucket_and_cors
 from src.sonclarus.shared.logging_config import setup_logging
 from src.sonclarus.shared.kafka_client import KafkaProducer
 from src.sonclarus.shared.responses import ApiResponse
@@ -22,6 +23,13 @@ setup_logging()
 # --- lifespan handler ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+
+    logger.info("Starting application (environment=%s)", settings.app.environment)
+
+    logger.info("Checking storage bucket and CORS")
+    await ensure_bucket_and_cors()
+    logger.info("Storage bootstrap step finished")
+
     logger.info("Initializing Redis client")
     await init_redis()
     logger.info("Redis client initialized successfully")
