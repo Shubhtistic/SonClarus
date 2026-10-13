@@ -42,7 +42,9 @@ async def signup(payload: SignupRequest, db_session: DbSessionDep):
         value=raw_refresh_token,
         httponly=True,
         secure=True,
-        samesite="strict",
+        # The web app and API are on different sites. Strict prevents the
+        # browser from sending this cookie with cross-site API requests.
+        samesite="none",
         path=REFRESH_COOKIE_PATH,
         max_age=90 * 24 * 60 * 60,
     )
@@ -68,7 +70,7 @@ async def login(payload: LoginRequest, db_session: DbSessionDep):
         value=raw_refresh_token,
         httponly=True,
         secure=True,
-        samesite="strict",
+        samesite="none",
         path=REFRESH_COOKIE_PATH,
         max_age=90 * 24 * 60 * 60,
     )
@@ -116,7 +118,7 @@ async def refresh(
         value=new_raw_refresh_token,
         httponly=True,
         secure=True,
-        samesite="strict",
+        samesite="none",
         path=REFRESH_COOKIE_PATH,
         max_age=remaining_seconds,
     )
