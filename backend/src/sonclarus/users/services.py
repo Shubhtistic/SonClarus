@@ -1,11 +1,13 @@
 from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.sonclarus.infrastructure.database import get_db_session
 from src.sonclarus.jobs.services import JobService
 
+from .exceptions import UserAlreadyExistsError, UserNotFoundError
 from .models import User
 from .repository import UserRepository
-from .exceptions import UserAlreadyExistsError, UserNotFoundError
 from .schemas import UserResponse, UserStatsResponse
 
 
@@ -34,28 +36,30 @@ class UserService:
         return user
 
     @staticmethod
-    async def get_user_info_by_id(user_id: UUID, db_session: AsyncSession) -> dict:
-        user = await UserRepository.get_user_by_id(
-            user_id=user_id, db_session=db_session
-        )
-        if not user:
-            raise UserNotFoundError(identifier=str(user_id))
+    async def get_user_info_by_id(user_id: UUID) -> dict:
+        async with get_db_session() as db_session:
+            user = await UserRepository.get_user_by_id(
+                user_id=user_id, db_session=db_session
+            )
+            if not user:
+                raise UserNotFoundError(identifier=str(user_id))
 
-        return UserResponse.model_validate(user).model_dump()
+            return UserResponse.model_validate(user).model_dump()
 
     @staticmethod
-    async def get_user_stats(
-        current_verified_user: dict, db_session: AsyncSession
-    ) -> dict:
+    async def get_active_verified_user(user_id: UUID) -> User | None:
+        async with get_db_session() as db_session:
+            user = await UserRepository.get_user_by_id(
+                user_id=user_id, db_session=db_session
+            )
+            if user and user.is_verified:
+                return user
+            return None
 
-        try:
-            user_id = UUID(current_verified_user.get("user_id"))
-        except ValueError, TypeError:
-            raise
-
-        jobs_count = await JobService.get_jobs_count_for_user(
-            user_id=user_id, db_session=db_session
-        )
+    @staticmethod
+    async def get_user_stats(current_verified_user: dict) -> dict:
+        user_id = UUID(current_verified_user.get("user_id"))
+        jobs_count = await JobService.get_jobs_count_for_user(user_id)
 
         return UserStatsResponse(
             jobs_completed=jobs_count.get("jobs_completed"),

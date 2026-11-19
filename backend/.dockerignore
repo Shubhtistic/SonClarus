@@ -1,0 +1,37 @@
+# Local credentials and environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.ty_cache/
+
+# Local tooling and editor files
+.git/
+.idea/
+.vscode/
+.DS_Store
+
+# Local data and generated artifacts
+uploads/
+processed/
+models/
+*.wav
+*.mp3
+*.pt
+*.pth
+
+# Documentation and local orchestration aren't needed in the image
+README.md
+API_SCHEMA.md
+compose*.yml
+example.env*

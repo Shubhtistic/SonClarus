@@ -1,39 +1,41 @@
-from copy import deepcopy
 import logging
+from copy import deepcopy
 from pathlib import PurePosixPath
 from uuid import UUID, uuid7
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.sonclarus.shared.kafka_client import KafkaProducer
-from src.sonclarus.users.repository import UserRepository
-from src.sonclarus.shared.config import get_settings
-from src.sonclarus.shared.s3_client import (
+from src.sonclarus.infrastructure.config import get_settings
+from src.sonclarus.infrastructure.database import SessionFactory, get_db_session
+from src.sonclarus.infrastructure.kafka_client import KafkaProducer
+from src.sonclarus.infrastructure.s3_client import (
+    delete_file_from_s3,
     generate_presigned_get,
     generate_presigned_post,
     verify_s3_upload,
-    delete_file_from_s3,
 )
+from src.sonclarus.users.repository import UserRepository
 
-from .models import Job
 from .enums import JobStatus, StageName, StageStatus
-from .schemas import (
-    STAGE_MODELS,
-    JOB_MODELS,
-    FileMetadataDict,
-    DownloadLinksResponse,
-    MlStageResultEvent,
-    RecentJobsResponse,
-    UploadRequestSchema,
-    load_stage,
-)
-from .repository import JobRepository
 from .exceptions import (
+    ActualSizeExceedsStorageError,
     InsufficientStorageError,
     JobNotCompletedError,
     JobNotFoundError,
     JobNotQueuedError,
     UploadNotFoundOnS3Error,
-    ActualSizeExceedsStorageError,
+)
+from .models import Job
+from .repository import JobRepository
+from .schemas import (
+    JOB_MODELS,
+    STAGE_MODELS,
+    DownloadLinksResponse,
+    FileMetadataDict,
+    MlStageResultEvent,
+    RecentJobsResponse,
+    UploadRequestSchema,
+    load_stage,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,127 +51,131 @@ class JobService:
         return str(key / filename)
 
     @staticmethod
-    async def get_download_links(
-        db_session: AsyncSession, user_id: UUID, job_id: UUID
-    ) -> dict:
+    async def get_download_links(user_id: UUID, job_id: UUID) -> dict:
         """Return dashboard metadata and short-lived links for a completed job."""
-        try:
-            cached_data = await JobRepository.get_cached_download_links(
-                user_id=user_id, job_id=job_id
-            )
-        except Exception:
-            logger.exception("Could not read cached download links (job_id=%s)", job_id)
-            cached_data = None
-        if cached_data:
+        async with get_db_session() as db_session:
             try:
-                return DownloadLinksResponse.model_validate(cached_data).model_dump(
-                    mode="json"
+                cached_data = await JobRepository.get_cached_download_links(
+                    user_id=user_id, job_id=job_id
                 )
             except Exception:
                 logger.exception(
-                    "Cached download links failed validation (job_id=%s)", job_id
+                    "Could not read cached download links (job_id=%s)", job_id
                 )
+                cached_data = None
+            if cached_data:
+                try:
+                    return DownloadLinksResponse.model_validate(cached_data).model_dump(
+                        mode="json"
+                    )
+                except Exception:
+                    logger.exception(
+                        "Cached download links failed validation (job_id=%s)", job_id
+                    )
 
-        job = await JobRepository.get_job_for_user(
-            db_session=db_session,
-            job_id=job_id,
-            user_id=user_id,
-        )
-        if job is None:
-            raise JobNotFoundError(str(job_id))
-        if not job.completed:
-            raise JobNotCompletedError(str(job_id))
-
-        settings = get_settings()
-        original = FileMetadataDict.from_db(deepcopy(job.file_metadata))
-        original_key = JobService._object_key(
-            original.s3_key, original.original_filename
-        )
-        original_url = await generate_presigned_get(
-            object_key=original_key,
-            bucket_name=original.s3_bucket,
-            expires_in=settings.app.download_url_ttl_seconds,
-            filename=original.original_filename,
-        )
-        original_item = {
-            "stage": "original",
-            "filename": original.original_filename,
-            "size_bytes": original.actual_size_bytes or original.declared_size_bytes,
-            "content_type": original.content_type,
-            "download_url": original_url,
-        }
-
-        files = [original_item]
-        for stage_name, raw_stage in (job.stages or {}).items():
-            stage_data = raw_stage or {}
-            filenames = (
-                [
-                    stage_data.get("first_filename"),
-                    stage_data.get("second_filename"),
-                ]
-                if stage_name == StageName.SEPARATE.value
-                else [stage_data.get("filename")]
+            job = await JobRepository.get_job_for_user(
+                db_session=db_session,
+                job_id=job_id,
+                user_id=user_id,
             )
-            stage_bucket = stage_data.get("s3_bucket")
-            stage_key = stage_data.get("s3_key")
-            for filename in filenames:
-                if not filename or not stage_bucket or not stage_key:
-                    continue
-                object_key = JobService._object_key(stage_key, filename)
-                download_url = await generate_presigned_get(
-                    object_key=object_key,
-                    bucket_name=stage_bucket,
-                    expires_in=settings.app.download_url_ttl_seconds,
-                    filename=filename,
+            if job is None:
+                raise JobNotFoundError(str(job_id))
+            if not job.completed:
+                raise JobNotCompletedError(str(job_id))
+
+            settings = get_settings()
+            original = FileMetadataDict.from_db(deepcopy(job.file_metadata))
+            original_key = JobService._object_key(
+                original.s3_key, original.original_filename
+            )
+            original_url = await generate_presigned_get(
+                object_key=original_key,
+                bucket_name=original.s3_bucket,
+                expires_in=settings.app.download_url_ttl_seconds,
+                filename=original.original_filename,
+            )
+            original_item = {
+                "stage": "original",
+                "filename": original.original_filename,
+                "size_bytes": original.actual_size_bytes
+                or original.declared_size_bytes,
+                "content_type": original.content_type,
+                "download_url": original_url,
+            }
+
+            files = [original_item]
+            for stage_name, raw_stage in (job.stages or {}).items():
+                stage_data = raw_stage or {}
+                filenames = (
+                    [
+                        stage_data.get("first_filename"),
+                        stage_data.get("second_filename"),
+                    ]
+                    if stage_name == StageName.SEPARATE.value
+                    else [stage_data.get("filename")]
                 )
-                file_data = {
-                    "stage": stage_name,
-                    "filename": filename,
-                    "size_bytes": (
-                        stage_data.get("size_bytes")
-                        if stage_name != StageName.SEPARATE.value
+                stage_bucket = stage_data.get("s3_bucket")
+                stage_key = stage_data.get("s3_key")
+                for filename in filenames:
+                    if not filename or not stage_bucket or not stage_key:
+                        continue
+                    object_key = JobService._object_key(stage_key, filename)
+                    download_url = await generate_presigned_get(
+                        object_key=object_key,
+                        bucket_name=stage_bucket,
+                        expires_in=settings.app.download_url_ttl_seconds,
+                        filename=filename,
+                    )
+                    file_data = {
+                        "stage": stage_name,
+                        "filename": filename,
+                        "size_bytes": (
+                            stage_data.get("size_bytes")
+                            if stage_name != StageName.SEPARATE.value
+                            else None
+                        ),
+                        "content_type": stage_data.get("content_type"),
+                        "download_url": download_url,
+                    }
+                    files.append(file_data)
+
+            data = {
+                "job": {
+                    "job_id": str(job.id),
+                    "status": job.status.value,
+                    "completed": job.completed,
+                    "current_stage": (
+                        job.current_stage.value
+                        if job.current_stage is not None
                         else None
                     ),
-                    "content_type": stage_data.get("content_type"),
-                    "download_url": download_url,
-                }
-                files.append(file_data)
+                    "selected_stages": [stage.value for stage in job.selected_options],
+                    "failed_stage": (
+                        job.failed_stage.value if job.failed_stage is not None else None
+                    ),
+                    "created_at": job.created_at.isoformat(),
+                    "uploaded_at": (
+                        job.uploaded_at.isoformat() if job.uploaded_at else None
+                    ),
+                    "updated_at": job.updated_at.isoformat(),
+                    "completed_at": (
+                        job.completed_at.isoformat() if job.completed_at else None
+                    ),
+                },
+                "files": files,
+            }
+            data = DownloadLinksResponse.model_validate(data).model_dump(mode="json")
 
-        data = {
-            "job": {
-                "job_id": str(job.id),
-                "status": job.status.value,
-                "completed": job.completed,
-                "current_stage": (
-                    job.current_stage.value if job.current_stage is not None else None
-                ),
-                "selected_stages": [stage.value for stage in job.selected_options],
-                "failed_stage": (
-                    job.failed_stage.value if job.failed_stage is not None else None
-                ),
-                "created_at": job.created_at.isoformat(),
-                "uploaded_at": job.uploaded_at.isoformat() if job.uploaded_at else None,
-                "updated_at": job.updated_at.isoformat(),
-                "completed_at": (
-                    job.completed_at.isoformat() if job.completed_at else None
-                ),
-            },
-            "files": files,
-        }
-        # Validate the dashboard payload and serialize datetimes/enums consistently
-        # before it is returned or stored in Redis.
-        data = DownloadLinksResponse.model_validate(data).model_dump(mode="json")
-
-        try:
-            await JobRepository.set_cached_download_links(
-                user_id=user_id,
-                job_id=job_id,
-                data=data,
-                ttl_seconds=settings.app.download_url_ttl_seconds,
-            )
-        except Exception:
-            logger.exception("Could not cache download links (job_id=%s)", job_id)
-        return data
+            try:
+                await JobRepository.set_cached_download_links(
+                    user_id=user_id,
+                    job_id=job_id,
+                    data=data,
+                    ttl_seconds=settings.app.download_url_ttl_seconds,
+                )
+            except Exception:
+                logger.exception("Could not cache download links (job_id=%s)", job_id)
+            return data
 
     @staticmethod
     async def process_ml_result(
@@ -333,217 +339,215 @@ class JobService:
 
     @staticmethod
     async def request_upload(
-        db_session: AsyncSession,
         user_id: UUID,
         storage_limit: int,
         storage_used: int,
         payload: UploadRequestSchema,
     ) -> dict:
+        async with get_db_session() as db_session:
+            settings = get_settings()
 
-        settings = get_settings()
+            remaining = storage_limit - storage_used
+            if payload.file_size_bytes > remaining:
+                raise InsufficientStorageError(remaining_bytes=remaining)
 
-        remaining = storage_limit - storage_used
-        if payload.file_size_bytes > remaining:
-            raise InsufficientStorageError(remaining_bytes=remaining)
+            job_id = uuid7()
+            job_id_str = str(job_id)
+            user_id_str = str(user_id)
 
-        job_id = uuid7()
-        job_id_str = str(job_id)
-        user_id_str = str(user_id)
+            max_allowed_bytes = min(remaining, settings.file.max_file_size)
 
-        max_allowed_bytes = min(remaining, settings.file.max_file_size)
+            object_key = f"{user_id_str}/{job_id_str}/original/{payload.filename}"
 
-        object_key = f"{user_id_str}/{job_id_str}/original/{payload.filename}"
+            presigned_data = await generate_presigned_post(
+                max_allowed_bytes=max_allowed_bytes,
+                object_key=object_key,
+                expires_in=settings.app.upload_url_ttl_seconds,
+            )
 
-        presigned_data = await generate_presigned_post(
-            max_allowed_bytes=max_allowed_bytes,
-            object_key=object_key,
-            expires_in=settings.app.upload_url_ttl_seconds,
-        )
+            original_file_metadata = FileMetadataDict(
+                original_filename=payload.filename,
+                content_type=payload.content_type,
+                declared_size_bytes=payload.file_size_bytes,
+                s3_bucket=settings.aws.bucket_name,
+                s3_key=f"{user_id_str}/{job_id_str}/original",
+            ).to_db()
 
-        original_file_metadata = FileMetadataDict(
-            original_filename=payload.filename,
-            content_type=payload.content_type,
-            declared_size_bytes=payload.file_size_bytes,
-            s3_bucket=settings.aws.bucket_name,
-            s3_key=f"{user_id_str}/{job_id_str}/original",
-        ).to_db()
+            new_job = Job(
+                id=job_id,
+                user_id=user_id,
+                selected_options=payload.selected_options,
+                file_metadata=original_file_metadata,
+            )
 
-        new_job = Job(
-            id=job_id,
-            user_id=user_id,
-            selected_options=payload.selected_options,
-            file_metadata=original_file_metadata,
-        )
+            await JobRepository.create_job(db_session=db_session, instance=new_job)
 
-        await JobRepository.create_job(db_session=db_session, instance=new_job)
+            logger.info(
+                "Upload requested: job_id=%s user_id=%s", job_id_str, user_id_str
+            )
 
-        logger.info("Upload requested: job_id=%s user_id=%s", job_id_str, user_id_str)
-
-        return {"job_id": job_id_str, "presigned_post": presigned_data}
+            return {"job_id": job_id_str, "presigned_post": presigned_data}
 
     @staticmethod
     async def confirm_upload(
-        db_session: AsyncSession,
         user_id: UUID,
         storage_limit: int,
         storage_used: int,
         job_id: UUID,
     ) -> dict:
+        async with SessionFactory() as db_session, db_session.begin():
+            user_id_str = str(user_id)
+            job_id_str = str(job_id)
 
-        user_id_str = str(user_id)
-        job_id_str = str(job_id)
-
-        job = await JobRepository.get_job_for_user(
-            db_session=db_session, job_id=job_id, user_id=user_id
-        )
-
-        if job is None:
-            raise JobNotFoundError(job_id=job_id_str)
-
-        if job.status != JobStatus.PENDING_UPLOAD:
-            raise JobNotQueuedError(job_id=job_id_str)
-
-        orginal_file = FileMetadataDict.from_db(job.file_metadata)
-
-        # object key
-        object_key = (
-            f"{user_id_str}/{job_id_str}/original/{orginal_file.original_filename}"
-        )
-
-        s3_result = await verify_s3_upload(object_key)
-
-        if not s3_result["is_uploaded"]:
-            await JobRepository.delete_job(
-                db_session=db_session, job_id=job_id, user_id=user_id
-            )
-            raise UploadNotFoundOnS3Error(job_id=job_id_str)
-
-        actual_size = s3_result["size"]
-        last_modified = s3_result["last_modified"]
-
-        if actual_size + storage_used > storage_limit:
-
-            await JobRepository.delete_job(
+            job = await JobRepository.get_job_for_user(
                 db_session=db_session, job_id=job_id, user_id=user_id
             )
 
+            if job is None:
+                raise JobNotFoundError(job_id=job_id_str)
+
+            if job.status != JobStatus.PENDING_UPLOAD:
+                raise JobNotQueuedError(job_id=job_id_str)
+
+            orginal_file = FileMetadataDict.from_db(job.file_metadata)
+
+            # object key
             object_key = (
                 f"{user_id_str}/{job_id_str}/original/{orginal_file.original_filename}"
             )
 
-            await delete_file_from_s3(object_key)
+            s3_result = await verify_s3_upload(object_key)
 
-            raise ActualSizeExceedsStorageError(job_id=job_id_str)
+            if not s3_result["is_uploaded"]:
+                await JobRepository.delete_job(
+                    db_session=db_session, job_id=job_id, user_id=user_id
+                )
+                raise UploadNotFoundOnS3Error(job_id=job_id_str)
 
-        # update the fields
-        orginal_file.actual_size_bytes = actual_size
-        orginal_file.charged_bytes = actual_size
+            actual_size = s3_result["size"]
+            last_modified = s3_result["last_modified"]
 
-        orginal_file_metadata = FileMetadataDict.model_validate(orginal_file).to_db()
+            if actual_size + storage_used > storage_limit:
+                await JobRepository.delete_job(
+                    db_session=db_session, job_id=job_id, user_id=user_id
+                )
 
-        # check what selected options are in this job and add pending to all
-        stage_names = [StageName(option.value) for option in job.selected_options]
+                object_key = f"{user_id_str}/{job_id_str}/original/{orginal_file.original_filename}"
 
-        # first stage to publish, read now because job attributes expire after the commit below
-        first_stage = stage_names[0]
+                await delete_file_from_s3(object_key)
 
-        stages = {
-            name.value: STAGE_MODELS[name](
-                s3_bucket=orginal_file.s3_bucket,
-            ).model_dump(mode="json")
-            for name in stage_names
-        }
+                raise ActualSizeExceedsStorageError(job_id=job_id_str)
 
-        confirmed = await JobRepository.confirm_job_and_update(
-            db_session=db_session,
-            job_id=job_id,
-            user_id=user_id,
-            file_metadata=orginal_file_metadata,
-            stages=stages,
-            uploaded_at=last_modified,
-            current_stage=first_stage,
-        )
+            # update the fields
+            orginal_file.actual_size_bytes = actual_size
+            orginal_file.charged_bytes = actual_size
 
-        if not confirmed:
-            raise JobNotQueuedError(job_id=job_id_str)
+            orginal_file_metadata = FileMetadataDict.model_validate(
+                orginal_file
+            ).to_db()
 
-        charged = await UserRepository.increment_user_storage(
-            db_session=db_session, user_id=user_id, delta_bytes=actual_size
-        )
+            # check what selected options are in this job and add pending to all
+            stage_names = [StageName(option.value) for option in job.selected_options]
 
-        if not charged:
-            await db_session.rollback()  # undo the QUEUED update
-            await JobRepository.delete_job(
-                db_session=db_session, job_id=job_id, user_id=user_id
+            # first stage to publish, read now because job attributes expire after the commit below
+            first_stage = stage_names[0]
+
+            stages = {
+                name.value: STAGE_MODELS[name](
+                    s3_bucket=orginal_file.s3_bucket,
+                ).model_dump(mode="json")
+                for name in stage_names
+            }
+
+            confirmed = await JobRepository.confirm_job_and_update(
+                db_session=db_session,
+                job_id=job_id,
+                user_id=user_id,
+                file_metadata=orginal_file_metadata,
+                stages=stages,
+                uploaded_at=last_modified,
+                current_stage=first_stage,
             )
-            await delete_file_from_s3(object_key)
-            raise ActualSizeExceedsStorageError(job_id=job_id_str)
 
-        # after rollback, session starts new txn, so delete runs with that and at end dependancy commits it after router function finishes
+            if not confirmed:
+                raise JobNotQueuedError(job_id=job_id_str)
 
-        # commit before publishing, so workers never get a message for a job that isn't saved
-        await db_session.commit()
+            charged = await UserRepository.increment_user_storage(
+                db_session=db_session, user_id=user_id, delta_bytes=actual_size
+            )
 
-        # publish to kafka
-        # transcribe also needs is_seperated, False here because separate would have been the first stage otherwise
-        extra_fields = (
-            {"is_seperated": False} if first_stage == StageName.TRANSCRIBE else {}
-        )
+            if not charged:
+                await JobRepository.delete_job(
+                    db_session=db_session, job_id=job_id, user_id=user_id
+                )
+                await delete_file_from_s3(object_key)
+                return None
 
-        # the first selected stage always reads the original upload
-        data = JOB_MODELS[first_stage](
-            job_id=job_id,
-            user_id=user_id,
-            s3_bucket=orginal_file.s3_bucket,
-            s3_key=orginal_file.s3_key,
-            requested_stage=first_stage,
-            input_filename=orginal_file.original_filename,
-            is_initial=True,
-            **extra_fields,
-        ).model_dump(mode="json")
+            # publish to kafka
+            # transcribe also needs is_seperated, False here because separate would have been the first stage otherwise
+            extra_fields = (
+                {"is_seperated": False} if first_stage == StageName.TRANSCRIBE else {}
+            )
 
-        if first_stage == StageName.DENOISE:
-            first_stage_topic = (get_settings()).kafka.denoise_topic
-        elif first_stage == StageName.SEPARATE:
-            first_stage_topic = (get_settings()).kafka.separate_topic
-        elif first_stage == StageName.TRANSCRIBE:
-            first_stage_topic = (get_settings()).kafka.transcribe_topic
-        elif first_stage == StageName.SUMMARIZE:
-            first_stage_topic = (get_settings()).kafka.summarize_topic
+            # the first selected stage always reads the original upload
+            data = JOB_MODELS[first_stage](
+                job_id=job_id,
+                user_id=user_id,
+                s3_bucket=orginal_file.s3_bucket,
+                s3_key=orginal_file.s3_key,
+                requested_stage=first_stage,
+                input_filename=orginal_file.original_filename,
+                is_initial=True,
+                **extra_fields,
+            ).model_dump(mode="json")
 
-        await KafkaProducer.send_job(data, first_stage_topic)
+            if first_stage == StageName.DENOISE:
+                first_stage_topic = (get_settings()).kafka.denoise_topic
+            elif first_stage == StageName.SEPARATE:
+                first_stage_topic = (get_settings()).kafka.separate_topic
+            elif first_stage == StageName.TRANSCRIBE:
+                first_stage_topic = (get_settings()).kafka.transcribe_topic
+            elif first_stage == StageName.SUMMARIZE:
+                first_stage_topic = (get_settings()).kafka.summarize_topic
 
-        logger.info("Upload confirmed: job_id=%s size=%d", job_id_str, actual_size)
+            logger.info("Upload confirmed: job_id=%s size=%d", job_id_str, actual_size)
 
-        return {
-            "message": "Upload confirmed and processing enqueued.",
-            "job_id": job_id_str,
-            "status": JobStatus.QUEUED,
-        }
+            result = (
+                {
+                    "message": "Upload confirmed and processing enqueued.",
+                    "job_id": job_id_str,
+                    "status": JobStatus.QUEUED,
+                },
+                data,
+                first_stage_topic,
+            )
+        if result is None:
+            raise ActualSizeExceedsStorageError(job_id=str(job_id))
+
+        response, message, topic = result
+        await KafkaProducer.send_job(message, topic)
+        return response
 
     @staticmethod
-    async def get_jobs_count_for_user(
-        user_id: UUID, db_session: AsyncSession
-    ) -> dict[str, int]:
+    async def get_jobs_count_for_user(user_id: UUID) -> dict[str, int]:
+        async with get_db_session() as db_session:
+            res_row = await JobRepository.count_processing_and_completed_jobs(
+                db_session=db_session, user_id=user_id
+            )
 
-        res_row = await JobRepository.count_processing_and_completed_jobs(
-            db_session=db_session, user_id=user_id
-        )
-
-        return {
-            "jobs_completed": res_row.jobs_completed,
-            "jobs_processing": res_row.jobs_processing,
-        }
+            return {
+                "jobs_completed": res_row.jobs_completed,
+                "jobs_processing": res_row.jobs_processing,
+            }
 
     @staticmethod
-    async def get_recent_jobs(
-        user_id: UUID, db_session: AsyncSession, limit: int = 10
-    ) -> list[dict]:
+    async def get_recent_jobs(user_id: UUID, limit: int = 10) -> list[dict]:
+        async with get_db_session() as db_session:
+            res = await JobRepository.get_recent_jobs(
+                user_id=user_id, db_session=db_session, limit=limit
+            )
 
-        res = await JobRepository.get_recent_jobs(
-            user_id=user_id, db_session=db_session, limit=limit
-        )
-
-        return [
-            RecentJobsResponse.model_validate(r).model_dump(mode="json") for r in res
-        ]
+            return [
+                RecentJobsResponse.model_validate(r).model_dump(mode="json")
+                for r in res
+            ]

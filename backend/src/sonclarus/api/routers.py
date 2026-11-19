@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
 from src.sonclarus.auth.routers import router as auth_router
-from src.sonclarus.users.routers import router as user_router
 from src.sonclarus.jobs.routers import router as jobs_router
+from src.sonclarus.users.routers import router as user_router
 
 router = APIRouter()
 

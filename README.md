@@ -6,14 +6,16 @@ A self-hostable audio intelligence service for cleaning, separating, transcribin
 
 **Backend:** Python 3.14, FastAPI, PostgreSQL, Redis, and Kafka.
 
-**ML workers:** Python 3.11, DeepFilterNet, SepFormer, Faster Whisper, and Gemini.
+**ML workers:** Python 3.11, DeepFilterNet, MossFormer2, Faster Whisper, and Gemini.
 
 [Backend guide](backend/README.md) | [ML guide](ml/README.md) | [Architecture diagram](architecture.svg)
+
+**Research evaluation:** [beginner's experiment guide](RESEARCH_EXPERIMENTS.md) (dataset preparation, step-by-step runs, metrics, result sheets, and paper scope).
 
 | Stage | Model or service |
 |---|---|
 | Denoise | DeepFilterNet |
-| Separate | SepFormer |
+| Separate | MossFormer2 |
 | Transcribe | Faster Whisper |
 | Summarize | Gemini API |
 
@@ -125,7 +127,7 @@ sequenceDiagram
 | Stage | Model or service | Result |
 |---|---|---|
 | **Denoise** | DeepFilterNet | A cleaned WAV file. |
-| **Separate** | SpeechBrain SepFormer (`wsj02mix`) | Two speaker WAV files. |
+| **Separate** | ClearerVoice MossFormer2 (`MossFormer2_SS_16K`) | Two speaker WAV files. |
 | **Transcribe** | Faster Whisper | Transcript output. For separated input, the tracks are combined into one transcript. |
 | **Summarize** | Gemini API | A text summary of the transcript. |
 

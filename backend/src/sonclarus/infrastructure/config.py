@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -70,6 +70,30 @@ class PostgresSettings(CommonSettings):
         validation_alias="POSTGRES_DB",
     )
 
+    pool_size: int = Field(
+        gt=0,
+        validation_alias="POSTGRES_POOL_SIZE",
+    )
+
+    max_overflow: int = Field(
+        ge=0,
+        validation_alias="POSTGRES_MAX_OVERFLOW",
+    )
+
+    pool_timeout: int = Field(
+        gt=0,
+        validation_alias="POSTGRES_POOL_TIMEOUT",
+    )
+
+    pool_recycle: int = Field(
+        gt=0,
+        validation_alias="POSTGRES_POOL_RECYCLE",
+    )
+
+    pool_pre_ping: bool = Field(
+        validation_alias="POSTGRES_POOL_PRE_PING",
+    )
+
     @property
     def postgres_async_url(self) -> str:
         return (
@@ -96,13 +120,41 @@ class RedisSettings(CommonSettings):
         validation_alias="REDIS_DB",
     )
 
-    redis_password: Optional[SecretStr] = Field(
+    redis_password: SecretStr | None = Field(
         default=None,
         validation_alias="REDIS_PASSWORD",
     )
 
     redis_tls: bool = Field(
         validation_alias="REDIS_TLS",
+    )
+
+    max_connections: int = Field(
+        gt=0,
+        validation_alias="REDIS_MAX_CONNECTIONS",
+    )
+
+    socket_timeout: float = Field(
+        gt=0,
+        validation_alias="REDIS_SOCKET_TIMEOUT",
+    )
+
+    socket_connect_timeout: float = Field(
+        gt=0,
+        validation_alias="REDIS_SOCKET_CONNECT_TIMEOUT",
+    )
+
+    socket_keepalive: bool = Field(
+        validation_alias="REDIS_SOCKET_KEEPALIVE",
+    )
+
+    retry_on_timeout: bool = Field(
+        validation_alias="REDIS_RETRY_ON_TIMEOUT",
+    )
+
+    health_check_interval: int = Field(
+        ge=0,
+        validation_alias="REDIS_HEALTH_CHECK_INTERVAL",
     )
 
     @property
@@ -114,11 +166,7 @@ class RedisSettings(CommonSettings):
         )
 
         return (
-            f"{scheme}://"
-            f"{password}"
-            f"{self.redis_host}:"
-            f"{self.redis_port}/"
-            f"{self.redis_db}"
+            f"{scheme}://{password}{self.redis_host}:{self.redis_port}/{self.redis_db}"
         )
 
 
@@ -138,17 +186,17 @@ class KafkaSettings(CommonSettings):
         validation_alias="KAFKA_SECURITY_PROTOCOL",
     )
 
-    sasl_mechanism: Optional[str] = Field(
+    sasl_mechanism: str | None = Field(
         default=None,
         validation_alias="KAFKA_SASL_MECHANISM",
     )
 
-    sasl_username: Optional[str] = Field(
+    sasl_username: str | None = Field(
         default=None,
         validation_alias="KAFKA_SASL_USERNAME",
     )
 
-    sasl_password: Optional[SecretStr] = Field(
+    sasl_password: SecretStr | None = Field(
         default=None,
         validation_alias="KAFKA_SASL_PASSWORD",
     )
@@ -195,7 +243,7 @@ class KafkaSettings(CommonSettings):
     )
 
     @model_validator(mode="after")
-    def _check_sasl_credentials(self) -> "KafkaSettings":
+    def _check_sasl_credentials(self) -> KafkaSettings:
         if self.security_protocol == "SASL_SSL" and not (
             self.sasl_mechanism and self.sasl_username and self.sasl_password
         ):
@@ -266,7 +314,7 @@ class AWSSettings(CommonSettings):
     endpoint_url: str = Field(
         validation_alias="AWS_ENDPOINT_URL",
     )
-    public_endpoint_url: Optional[str] = Field(
+    public_endpoint_url: str | None = Field(
         default=None,
         validation_alias="AWS_PUBLIC_ENDPOINT_URL",
     )
@@ -288,7 +336,7 @@ class FileSettings(CommonSettings):
 
 # --- RustFS bucket bootstrap (non-live only) ---
 class RustFsSettings(CommonSettings):
-    cors_allowed_origins: Optional[list[str]] = Field(
+    cors_allowed_origins: list[str] | None = Field(
         validation_alias="BUCKET_CORS_ORIGINS",
     )
     cors_allowed_methods: list[str] = Field(

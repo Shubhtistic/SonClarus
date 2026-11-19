@@ -6,11 +6,11 @@ from aiokafka import AIOKafkaConsumer
 from aiokafka.helpers import create_ssl_context
 from aiokafka.structs import TopicPartition
 
+from src.sonclarus.infrastructure.config import get_settings
+from src.sonclarus.infrastructure.database import SessionFactory
+from src.sonclarus.infrastructure.kafka_client import KafkaProducer
 from src.sonclarus.jobs.schemas import MlStageResultEvent
 from src.sonclarus.jobs.services import JobService
-from src.sonclarus.shared.config import get_settings
-from src.sonclarus.shared.database import SessionFactory
-from src.sonclarus.shared.kafka_client import KafkaProducer
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +68,8 @@ async def _consume_results() -> None:
                     event.job_id,
                     event.completed_stage.value,
                 )
-                async with SessionFactory() as db_session:
-                    async with db_session.begin():
-                        applied = await JobService.process_ml_result(db_session, event)
+                async with SessionFactory() as db_session, db_session.begin():
+                    applied = await JobService.process_ml_result(db_session, event)
 
                 await consumer.commit()
                 logger.info(

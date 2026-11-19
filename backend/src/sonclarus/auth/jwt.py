@@ -3,7 +3,8 @@ from uuid import uuid7
 
 import jwt as pyjwt
 
-from src.sonclarus.shared.config import get_settings
+from src.sonclarus.infrastructure.config import get_settings
+
 from .exceptions import ExpiredSignatureError, InvalidTokenError, UnexpectedJwtError
 
 

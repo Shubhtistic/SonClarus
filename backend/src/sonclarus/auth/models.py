@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
+from uuid import UUID, uuid7
+
 from sqlalchemy import Column, DateTime, ForeignKey
 from sqlmodel import Field, SQLModel
-from uuid import UUID, uuid7
 
 
 class RefreshTokens(SQLModel, table=True):
@@ -22,12 +22,12 @@ class RefreshTokens(SQLModel, table=True):
     max_window_limit: datetime = Field(sa_column=Column(DateTime(timezone=True)))
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True)),
     )
 
     expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True)))
 
-    revoked_at: Optional[datetime] = Field(
+    revoked_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )

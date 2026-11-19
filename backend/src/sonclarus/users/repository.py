@@ -1,15 +1,16 @@
-from typing import Optional
 from uuid import UUID
+
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import User
-from src.sonclarus.shared.database import (
+from src.sonclarus.infrastructure.repo_helpers import (
     check_exists,
     create,
     execute_query,
     get_one_by_query,
 )
+
+from .models import User
 
 
 class UserRepository:
@@ -24,12 +25,12 @@ class UserRepository:
         return await create(instance=instance, db_session=db_session)
 
     @staticmethod
-    async def get_by_email(db_session: AsyncSession, email: str) -> Optional[User]:
+    async def get_by_email(db_session: AsyncSession, email: str) -> User | None:
         qry = select(User).where(User.email == email, User.is_active == True)
         return await get_one_by_query(qry, db_session)
 
     @staticmethod
-    async def get_user_by_id(user_id: UUID, db_session: AsyncSession) -> Optional[User]:
+    async def get_user_by_id(user_id: UUID, db_session: AsyncSession) -> User | None:
         qry = select(User).where(User.id == user_id, User.is_active == True)
         return await get_one_by_query(qry, db_session)
 

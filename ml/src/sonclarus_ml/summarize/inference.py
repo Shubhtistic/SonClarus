@@ -2,8 +2,8 @@ import logging
 from google import genai
 from google.genai import types
 
-from sonclarus_ml.shared.config import GeminiSettings, get_settings
-from sonclarus_ml.shared.exceptions import ExternalAPICallError, PipelineError
+from sonclarus_ml.infrastructure.config import GeminiSettings, get_settings
+from sonclarus_ml.infrastructure.exceptions import ExternalAPICallError, PipelineError
 
 logger = logging.getLogger(__name__)
 

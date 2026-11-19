@@ -21,7 +21,7 @@ WORKDIR /app
 
 COPY requirements.txt ./requirements.txt
 RUN python -m pip install --no-cache-dir -r requirements.txt
-RUN python -m pip check && python -c "import aioboto3, aiokafka, df.enhance, faster_whisper, speechbrain, torch, torchaudio; from google import genai; print('ML dependency imports passed')"
+RUN python -m pip check && python -c "import aioboto3, aiokafka, clearvoice, df.enhance, faster_whisper, torch, torchaudio; from google import genai; print('ML dependency imports passed')"
 
 COPY src ./src
 COPY start_consumers.py ./start_consumers.py

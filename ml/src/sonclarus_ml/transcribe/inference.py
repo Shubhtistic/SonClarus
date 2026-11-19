@@ -5,7 +5,7 @@ from pathlib import Path
 
 import torch
 from faster_whisper import WhisperModel
-from sonclarus_ml.shared.exceptions import (
+from sonclarus_ml.infrastructure.exceptions import (
     AudioValidationError,
     InferenceError,
     ModelLoadError,
@@ -15,7 +15,7 @@ from sonclarus_ml.transcribe.preprocessing import (
     ensure_output_dir,
     validate_input_paths,
 )
-from sonclarus_ml.shared.config import TranscribeSettings, get_settings
+from sonclarus_ml.infrastructure.config import TranscribeSettings, get_settings
 
 logger = logging.getLogger(__name__)
 

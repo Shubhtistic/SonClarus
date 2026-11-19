@@ -1,14 +1,15 @@
-from typing import Annotated, Optional
-from fastapi import Depends
-from redis.asyncio import Redis, ConnectionPool
+from typing import Annotated
 
-from src.sonclarus.shared.config import get_settings
+from fastapi import Depends
+from redis.asyncio import ConnectionPool, Redis
+
+from src.sonclarus.infrastructure.config import get_settings
 
 settings = get_settings()
 
 # --- globals ---
-_pool: Optional[ConnectionPool] = None
-_redis: Optional[Redis] = None
+_pool: ConnectionPool | None = None
+_redis: Redis | None = None
 
 
 async def init_redis() -> None:
@@ -21,12 +22,12 @@ async def init_redis() -> None:
     _pool = ConnectionPool.from_url(
         settings.redis.redis_url,
         decode_responses=True,
-        max_connections=50,
-        socket_timeout=5,
-        socket_connect_timeout=5,
-        socket_keepalive=True,
-        retry_on_timeout=True,
-        health_check_interval=30,
+        max_connections=settings.redis.max_connections,
+        socket_timeout=settings.redis.socket_timeout,
+        socket_connect_timeout=settings.redis.socket_connect_timeout,
+        socket_keepalive=settings.redis.socket_keepalive,
+        retry_on_timeout=settings.redis.retry_on_timeout,
+        health_check_interval=settings.redis.health_check_interval,
     )
     _redis = Redis(connection_pool=_pool)
 

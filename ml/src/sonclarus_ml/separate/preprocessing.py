@@ -4,8 +4,8 @@ from pathlib import Path
 import torch
 import torchaudio
 
-from sonclarus_ml.shared.config import SeparateSettings
-from sonclarus_ml.shared.exceptions import AudioValidationError
+from sonclarus_ml.infrastructure.config import SeparateSettings
+from sonclarus_ml.infrastructure.exceptions import AudioValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +25,9 @@ def validate_input(audio_path: str) -> Path:
 def preprocess_audio(
     audio_path: Path, config: SeparateSettings
 ) -> tuple[torch.Tensor, int]:
-    """Load, resample to 8 kHz, and downmix to mono.
+    """Load, resample to 16 kHz, and downmix to mono.
 
-    SepFormer expects 8 kHz single-channel audio.  This function handles
+    MossFormer2 expects 16 kHz single-channel audio. This function handles
     all necessary conversions.
 
     Returns:

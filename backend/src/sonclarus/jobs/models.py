@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import UUID, uuid7
 
 from sqlalchemy import (
@@ -7,6 +6,8 @@ from sqlalchemy import (
     Column,
     DateTime,
     text,
+)
+from sqlalchemy import (
     Enum as SaEnum,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -78,7 +79,7 @@ class Job(SQLModel, table=True):
     )
 
     # which stage is running right now; for GET /status
-    current_stage: Optional[StageName] = Field(
+    current_stage: StageName | None = Field(
         default=None,
         sa_column=Column(
             SaEnum(
@@ -110,7 +111,7 @@ class Job(SQLModel, table=True):
     )
 
     # Per-stage metadata, keyed by StageName value. See shape above.
-    stages: Optional[dict] = Field(
+    stages: dict | None = Field(
         default_factory=dict,
         sa_column=Column(
             MutableDict.as_mutable(JSONB),
@@ -130,7 +131,7 @@ class Job(SQLModel, table=True):
     )
 
     # Failure and retry
-    failed_stage: Optional[StageName] = Field(
+    failed_stage: StageName | None = Field(
         default=None,
         sa_column=Column(
             SaEnum(
@@ -147,29 +148,29 @@ class Job(SQLModel, table=True):
     # Timeline
 
     # use header response -> last_modified_at
-    uploaded_at: Optional[datetime] = Field(
+    uploaded_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )
 
-    completed_at: Optional[datetime] = Field(
+    completed_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
 
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(
             DateTime(timezone=True),
             nullable=False,
-            onupdate=lambda: datetime.now(timezone.utc),
+            onupdate=lambda: datetime.now(UTC),
         ),
     )
 
-    deleted_at: Optional[datetime] = Field(
+    deleted_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )
 

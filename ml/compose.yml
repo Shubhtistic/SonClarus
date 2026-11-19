@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    gpus: all
     restart: unless-stopped
     init: true
     env_file:
@@ -14,7 +15,9 @@ services:
       AWS_ENDPOINT_URL: ${ML_AWS_ENDPOINT_URL-http://rustfs:9000}
       ML_WORK_DIR: /tmp/sonclarus-ml
       ML_TORCH_NUM_THREADS: ${ML_TORCH_NUM_THREADS:-2}
-      SEPFORMER_SAVEDIR: /models/sepformer-wsj02mix
+      MOSSFORMER_SAVEDIR: /models/mossformer2
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
       XDG_CACHE_HOME: /models/cache
       HF_HOME: /models/huggingface
       TORCH_HOME: /models/torch

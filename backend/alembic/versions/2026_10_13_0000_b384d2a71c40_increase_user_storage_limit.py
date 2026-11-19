@@ -6,16 +6,17 @@ Create Date: 2026-10-13 00:00:00.000000
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
+
+import sqlalchemy as sa
 
 from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "b384d2a71c40"
-down_revision: Union[str, Sequence[str], None] = "7c1012941b14"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "7c1012941b14"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 OLD_LIMIT_BYTES = 104_857_600

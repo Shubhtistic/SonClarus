@@ -1,14 +1,14 @@
 import asyncio
 from logging.config import fileConfig
+
+from backend.alembic.model_registry import *
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
-from alembic import context
-
-# --- imports models ---
 from sqlmodel import SQLModel
-from src.sonclarus.shared.db_registry import *
-from src.sonclarus.shared.config import get_settings
+
+from alembic import context
+from src.sonclarus.infrastructure.config import get_settings
 
 config = context.config
 

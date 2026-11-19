@@ -153,7 +153,7 @@ Start the ML consumers from `../ml` as described in the [ML README](../ml/README
 
 ## Configuration
 
-Settings are loaded with Pydantic Settings from [`shared/config.py`](src/sonclarus/shared/config.py). `example.env` is the variable reference; keep real secrets in the ignored `.env` file.
+Settings are loaded with Pydantic Settings from [`infrastructure/config.py`](src/sonclarus/infrastructure/config.py). `example.env` is the variable reference; keep real secrets in the ignored `.env` file.
 
 | Group | Variables | Purpose |
 |---|---|---|
@@ -170,11 +170,11 @@ Settings are loaded with Pydantic Settings from [`shared/config.py`](src/sonclar
 
 ```text
 src/sonclarus/
-├── api/          Route aggregation
+├── api/          Route aggregation, response contracts, validation, and middleware
 ├── auth/         Authentication, token lifecycle, and user dependencies
+├── infrastructure/ Settings, transactions, repository helpers, Kafka, Redis, and S3
 ├── jobs/         Upload and job lifecycle, schemas, result handling
 ├── users/        User profile and storage data
-├── shared/       Settings, DB sessions, Kafka, Redis, S3, API response
 ├── main.py       FastAPI app and lifespan
 └── run_consumer.py  Backend ML-result consumer
 

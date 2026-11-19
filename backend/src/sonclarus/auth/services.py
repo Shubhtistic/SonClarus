@@ -1,19 +1,16 @@
 import hashlib
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.sonclarus.users.services import UserService
+from src.sonclarus.infrastructure.database import get_db_session
 from src.sonclarus.users.exceptions import UserNotFoundError
+from src.sonclarus.users.services import UserService
 
 from . import password as auth_password
-from .jwt import create_access_token
-from .models import RefreshTokens
-from .repository import RefreshTokenRepository, JwtRepository
 from .exceptions import (
     InvalidCredentialsError,
     RefreshTokenExpiredError,
@@ -21,76 +18,84 @@ from .exceptions import (
     RefreshTokenRevokedError,
     SessionWindowExceededError,
 )
+from .jwt import create_access_token
+from .models import RefreshTokens
+from .repository import JwtRepository, RefreshTokenRepository
 
 logger = logging.getLogger(__name__)
 
 
 class AuthService:
     @staticmethod
-    async def signup(db_session: AsyncSession, signup_data: dict) -> tuple[str, str]:
-        signup_data["hashed_password"] = auth_password.hash_password(
-            signup_data.pop("password")
-        )
-        new_user = await UserService.create_user(
-            db_session=db_session, user_data=signup_data
-        )
-        access_token, raw_refresh_token = await AuthService._issue_tokens(
-            db_session=db_session, user_id=new_user.id
-        )
-        logger.info("Signup service operation succeeded")
-        return access_token, raw_refresh_token
+    async def signup(signup_data: dict) -> tuple[str, str]:
+        async with get_db_session() as db_session:
+            signup_data["hashed_password"] = auth_password.hash_password(
+                signup_data.pop("password")
+            )
+            new_user = await UserService.create_user(
+                db_session=db_session, user_data=signup_data
+            )
+            access_token, raw_refresh_token = await AuthService._issue_tokens(
+                db_session=db_session, user_id=new_user.id
+            )
+            logger.info("Signup service operation succeeded")
+            return access_token, raw_refresh_token
 
     @staticmethod
-    async def login(
-        db_session: AsyncSession, email: str, plain_password: str
-    ) -> tuple[str, str]:
-        try:
-            user = await UserService.get_by_email(db_session=db_session, email=email)
-        except UserNotFoundError:
-            raise InvalidCredentialsError(email=email)
+    async def login(email: str, plain_password: str) -> tuple[str, str]:
+        async with get_db_session() as db_session:
+            try:
+                user = await UserService.get_by_email(
+                    db_session=db_session, email=email
+                )
+            except UserNotFoundError:
+                raise InvalidCredentialsError(email=email)
 
-        if not auth_password.verify_password(plain_password, user.hashed_password):
-            raise InvalidCredentialsError(email=email)
+            if not auth_password.verify_password(plain_password, user.hashed_password):
+                raise InvalidCredentialsError(email=email)
 
-        access_token, raw_refresh_token = await AuthService._issue_tokens(
-            db_session=db_session, user_id=user.id
-        )
-        logger.info("Login service operation succeeded")
-        return access_token, raw_refresh_token
+            access_token, raw_refresh_token = await AuthService._issue_tokens(
+                db_session=db_session, user_id=user.id
+            )
+            logger.info("Login service operation succeeded")
+            return access_token, raw_refresh_token
 
     @staticmethod
-    async def refresh(
-        db_session: AsyncSession, raw_refresh_token: str
-    ) -> tuple[str, str, datetime]:
-        """Rotate a refresh token. Returns (access_token, new_raw_refresh_token, max_window_limit)."""
+    async def refresh(raw_refresh_token: str) -> tuple[str, str, datetime]:
+        async with get_db_session() as db_session:
+            """Rotate a refresh token and return the token pair and session limit."""
+            (
+                raw_refresh_token,
+                user_id,
+                max_window_limit,
+            ) = await RefreshTokenService.rotate(
+                db_session=db_session, raw_refresh_token=raw_refresh_token
+            )
 
-        raw_refresh_token, user_id, max_window_limit = await RefreshTokenService.rotate(
-            db_session=db_session, raw_refresh_token=raw_refresh_token
-        )
-
-        access_token = create_access_token(user_id=str(user_id))
-        logger.info("Refresh service operation succeeded")
-        return access_token, raw_refresh_token, max_window_limit
+            access_token = create_access_token(user_id=str(user_id))
+            logger.info("Refresh service operation succeeded")
+            return access_token, raw_refresh_token, max_window_limit
 
     @staticmethod
     async def logout(
-        db_session: AsyncSession,
-        raw_refresh_token: Optional[str] = None,
-        jti: Optional[str] = None,
-        ttl_seconds: Optional[int] = None,
+        raw_refresh_token: str | None = None,
+        jti: str | None = None,
+        ttl_seconds: int | None = None,
     ) -> None:
+        async with get_db_session() as db_session:
+            if raw_refresh_token:
+                await RefreshTokenRepository.revoke(
+                    db_session=db_session,
+                    hashed_token=RefreshTokenService.hash_token(raw_refresh_token),
+                    revoked_at=datetime.now(UTC),
+                )
 
-        if raw_refresh_token:
-            await RefreshTokenRepository.revoke(
-                db_session=db_session,
-                hashed_token=RefreshTokenService.hash_token(raw_refresh_token),
-                revoked_at=datetime.now(timezone.utc),
-            )
+            if jti and ttl_seconds is not None:
+                await JwtRepository.add_jti_to_blacklist(
+                    jti=jti, ttl_seconds=ttl_seconds
+                )
 
-        if jti and ttl_seconds is not None:
-            await JwtRepository.add_jti_to_blacklist(jti=jti, ttl_seconds=ttl_seconds)
-
-        logger.info("Logout service operation completed")
+            logger.info("Logout service operation completed")
 
     @staticmethod
     async def _issue_tokens(db_session: AsyncSession, user_id: UUID) -> tuple[str, str]:
@@ -104,7 +109,6 @@ class AuthService:
 
 
 class RefreshTokenService:
-
     SLIDING_WINDOW = timedelta(days=7)
     MAX_SESSION_WINDOW = timedelta(days=90)
 
@@ -131,7 +135,7 @@ class RefreshTokenService:
     ) -> str:
         """create a refresh token and save in db"""
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         raw_token, token_hash = RefreshTokenService.generate_refresh_token()
 
         new_refresh_token = RefreshTokens(
@@ -154,7 +158,7 @@ class RefreshTokenService:
     ) -> tuple[str, UUID, datetime]:
         """called when refreshing a token, if under max_session limit -> rotated"""
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         hashed_token = RefreshTokenService.hash_token(raw_refresh_token)
 

@@ -12,9 +12,9 @@ from pathlib import Path
 ML_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(ML_DIR / "src"))
 
-from sonclarus_ml.shared.logging_config import setup_logging
-from sonclarus_ml.shared.config import get_settings
-from sonclarus_ml.shared.consumer import run_stage_consumer
+from sonclarus_ml.infrastructure.logging_config import setup_logging
+from sonclarus_ml.infrastructure.config import get_settings
+from sonclarus_ml.infrastructure.consumer import run_stage_consumer
 
 setup_logging(level="INFO")
 logger = logging.getLogger("ml_consumers")

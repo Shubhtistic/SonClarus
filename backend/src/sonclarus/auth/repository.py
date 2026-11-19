@@ -1,11 +1,15 @@
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
+
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.sonclarus.shared.database import create, execute_query, get_one_by_query
-from src.sonclarus.shared.redis_client import get_redis
+from src.sonclarus.infrastructure.redis_client import get_redis
+from src.sonclarus.infrastructure.repo_helpers import (
+    create,
+    execute_query,
+    get_one_by_query,
+)
 
 from .models import RefreshTokens
 
@@ -20,7 +24,7 @@ class RefreshTokenRepository:
     @staticmethod
     async def get_by_hash(
         db_session: AsyncSession, token_hash: str
-    ) -> Optional[RefreshTokens]:
+    ) -> RefreshTokens | None:
         """get a refresh token by hash"""
 
         qry = select(RefreshTokens).where(RefreshTokens.hashed_token == token_hash)

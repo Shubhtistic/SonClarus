@@ -1,4 +1,5 @@
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
+
 import orjson
 from fastapi.responses import Response
 
@@ -22,10 +23,10 @@ class ApiResponse(Response):
     def success(
         cls,
         message: str = "Success",
-        data: Optional[T] = None,
+        data: T | None = None,
         code: int = 200,
-        meta: Optional[dict] = None,
-    ) -> "ApiResponse":
+        meta: dict | None = None,
+    ) -> ApiResponse:
         return cls(
             content={
                 "message": message,
@@ -41,9 +42,9 @@ class ApiResponse(Response):
         cls,
         message: str = "Something went wrong",
         code: int = 400,
-        data: Optional[T] = None,
-        meta: Optional[dict] = None,
-    ) -> "ApiResponse":
+        data: T | None = None,
+        meta: dict | None = None,
+    ) -> ApiResponse:
         return cls(
             content={
                 "message": message,

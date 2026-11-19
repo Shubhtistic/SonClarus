@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from src.sonclarus.shared.utilities import reject_blank_text
+from src.sonclarus.api.validation import reject_blank_text
 
 
 class SignupRequest(BaseModel):

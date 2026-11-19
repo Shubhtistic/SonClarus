@@ -2,11 +2,11 @@ import logging
 from urllib.parse import quote
 
 import aioboto3
+from aiobotocore.config import AioConfig
 from botocore.exceptions import ClientError
 from fastapi import HTTPException, status
-from aiobotocore.config import AioConfig
 
-from src.sonclarus.shared.config import get_settings
+from src.sonclarus.infrastructure.config import get_settings
 
 logger = logging.getLogger(__name__)
 

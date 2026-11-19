@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from sonclarus_ml.shared.exceptions import AudioValidationError
+from sonclarus_ml.infrastructure.exceptions import AudioValidationError
 
 logger = logging.getLogger(__name__)
 

@@ -32,3 +32,9 @@ venv/
 *.log
 
 frontend/.streamlit/secrets.toml
+
+# Research notes
+RESEARCH_EXPERIMENTS.md
+
+# Local reference material
+/internal/

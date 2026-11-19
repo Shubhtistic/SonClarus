@@ -1,20 +1,21 @@
 import logging
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query
 
-from src.sonclarus.shared.database import DbSessionDep
-from src.sonclarus.shared.responses import ApiResponse
+from fastapi import APIRouter, Query
+
+from src.sonclarus.api.responses import ApiResponse
 from src.sonclarus.auth.dependencies import CurrentUserDep, VerifiedCurrentUserDep
-from .schemas import UploadRequestSchema
-from .services import JobService
+
 from .exceptions import (
+    ActualSizeExceedsStorageError,
     InsufficientStorageError,
     JobNotCompletedError,
     JobNotFoundError,
     JobNotQueuedError,
     UploadNotFoundOnS3Error,
-    ActualSizeExceedsStorageError,
 )
+from .schemas import UploadRequestSchema
+from .services import JobService
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,6 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 @router.post("/request-upload")
 async def request_upload(
     payload: UploadRequestSchema,
-    db_session: DbSessionDep,
     current_user: VerifiedCurrentUserDep,
 ):
     user_id = UUID(current_user.get("user_id"))
@@ -32,7 +32,6 @@ async def request_upload(
 
     try:
         data = await JobService.request_upload(
-            db_session=db_session,
             user_id=user_id,
             storage_limit=current_user.get("storage_limit"),
             storage_used=current_user.get("storage_used"),
@@ -52,18 +51,16 @@ async def request_upload(
 @router.post("/{job_id}/confirm-upload")
 async def confirm_upload(
     job_id: str,
-    db_session: DbSessionDep,
     current_user: VerifiedCurrentUserDep,
 ):
     try:
         user_id = UUID(current_user.get("user_id"))
         job_uuid = UUID(job_id)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return ApiResponse.error(message="Invalid id format", code=422)
 
     try:
         data = await JobService.confirm_upload(
-            db_session=db_session,
             user_id=user_id,
             storage_limit=current_user.get("storage_limit"),
             storage_used=current_user.get("storage_used"),
@@ -91,18 +88,16 @@ async def confirm_upload(
 @router.get("/{job_id}/download-links")
 async def get_download_links(
     job_id: str,
-    db_session: DbSessionDep,
     current_user: VerifiedCurrentUserDep,
 ):
     try:
         user_id = UUID(current_user.get("user_id"))
         job_uuid = UUID(job_id)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return ApiResponse.error(message="Invalid id format", code=422)
 
     try:
         data = await JobService.get_download_links(
-            db_session=db_session,
             user_id=user_id,
             job_id=job_uuid,
         )
@@ -116,17 +111,14 @@ async def get_download_links(
 
 @router.get("/recent-jobs")
 async def get_recent_jobs(
-    db_session: DbSessionDep,
     current_user: CurrentUserDep,
     limit: int = Query(default=10, ge=1, le=40),
 ):
     try:
         user_id = UUID(current_user.get("user_id"))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return ApiResponse.error(message="Invalid id format", code=422)
 
-    data = await JobService.get_recent_jobs(
-        user_id=user_id, db_session=db_session, limit=limit
-    )
+    data = await JobService.get_recent_jobs(user_id=user_id, limit=limit)
 
     return ApiResponse.success(message="Recent jobs fetched Successfully", data=data)

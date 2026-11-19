@@ -1,6 +1,6 @@
 from pydantic import BaseModel, field_validator
 
-from sonclarus_ml.shared.utilities import reject_blank_text
+from sonclarus_ml.infrastructure.validation import reject_blank_text
 
 
 class TranscribeSegment(BaseModel):

@@ -1,16 +1,14 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite the Sonclarus Team as below."
+message: "If you use this software, please cite it as below."
 title: "Sonclarus: Hybrid Cloud Audio Intelligence Platform"
-abstract: "A zero-cost, event-driven architecture for forensic audio separation and transcription using AWS Lambda and EC2."
+abstract: "An event-driven platform for forensic audio source separation and transcription, hostable in the cloud on AWS (Lambda and EC2) or self-hosted locally with RustFS (S3-compatible storage)."
+type: software
 authors:
-  - name: "Sonclarus Team"
   - family-names: "Pawar"
     given-names: "Shubham"
-    role: "Core Developer"
   - family-names: "Revaskar"
     given-names: "Mihir"
-    role: "Core Developer"
 version: 1.0.0
 date-released: 2026-01-18
-license: "MIT"
+license: MIT
 repository-code: "https://github.com/Shubhtistic/SonClarus"

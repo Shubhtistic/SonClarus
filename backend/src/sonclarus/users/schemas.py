@@ -1,7 +1,8 @@
 from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from src.sonclarus.shared.utilities import reject_blank_text
+from src.sonclarus.api.validation import reject_blank_text
 
 
 class UserResponse(BaseModel):

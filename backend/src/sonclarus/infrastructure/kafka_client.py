@@ -1,15 +1,27 @@
-import asyncio, logging, orjson, contextlib
+import asyncio
+import contextlib
+import logging
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any
+
+import orjson
 from aiokafka import AIOKafkaProducer
 from aiokafka.errors import KafkaConnectionError, KafkaError
 from aiokafka.helpers import create_ssl_context
 
-from src.sonclarus.shared.exceptions import KafkaNotStartedError, KafkaPublishError
-from src.sonclarus.shared.config import get_settings
+from src.sonclarus.infrastructure.config import get_settings
+
+
+class KafkaNotStartedError(RuntimeError):
+    """Raised when a job is published before the producer starts."""
+
+
+class KafkaPublishError(RuntimeError):
+    """Raised when a Kafka job cannot be serialized or published."""
+
 
 # kafka producer
-_producer: Optional[AIOKafkaProducer] = None
+_producer: AIOKafkaProducer | None = None
 _lifecycle_lock = asyncio.Lock()
 
 logger = logging.getLogger(__name__)
@@ -59,7 +71,7 @@ class KafkaProducer:
                 config["sasl_plain_username"] = settings.kafka.sasl_username
                 config["sasl_plain_password"] = settings.kafka.sasl_password
 
-            last_error: Optional[Exception] = None
+            last_error: Exception | None = None
             for attempt in range(1, settings.kafka.start_max_attempts + 1):
                 producer = AIOKafkaProducer(**config)
                 try:
@@ -109,7 +121,7 @@ class KafkaProducer:
                 return
             try:
                 await asyncio.wait_for(producer.stop(), timeout=10)
-            except Exception as exc:  # shutdown must never raise
+            except (TimeoutError, KafkaError, OSError) as exc:
                 logger.warning("Error while stopping Kafka producer: %s", exc)
             logger.info("Kafka producer stopped")
 
@@ -117,7 +129,7 @@ class KafkaProducer:
     async def send_job(
         payload: Mapping[str, Any],
         topic: str,
-        partition: Optional[int] = None,
+        partition: int | None = None,
     ) -> dict[str, Any]:
         """serialize input_dict with orjson and publish to kafka
         Returns {"topic", "partition", "offset"}.
@@ -146,7 +158,7 @@ class KafkaProducer:
                 ),
                 timeout=settings.kafka.send_timeout_seconds,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             logger.error("Kafka send timed out (job_id=%s)", job_id)
             raise KafkaPublishError("Timed out publishing to Kafka") from exc
         except KafkaError as exc:

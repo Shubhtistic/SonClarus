@@ -1,18 +1,18 @@
 import logging
 from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from scalar_fastapi import get_scalar_api_reference
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
 
-from src.sonclarus.shared.s3_client import ensure_bucket_and_cors
-from src.sonclarus.shared.logging_config import setup_logging
-from src.sonclarus.shared.kafka_client import KafkaProducer
-from src.sonclarus.shared.responses import ApiResponse
-from src.sonclarus.shared.redis_client import init_redis, close_redis
+from src.sonclarus.api.middleware import CORSMiddlewareWithSettings, log_requests
+from src.sonclarus.api.responses import ApiResponse
 from src.sonclarus.api.routers import router as api_router
-from src.sonclarus.shared.config import get_settings
-from src.sonclarus.shared.responses import ApiResponse
+from src.sonclarus.infrastructure.config import get_settings
+from src.sonclarus.infrastructure.kafka_client import KafkaProducer
+from src.sonclarus.infrastructure.logging_config import setup_logging
+from src.sonclarus.infrastructure.redis_client import close_redis, init_redis
+from src.sonclarus.infrastructure.s3_client import ensure_bucket_and_cors
 
 # --- logger ---
 
@@ -85,14 +85,13 @@ async def validation_handler(request: Request, exc: RequestValidationError):
 
 settings = get_settings()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors.allowed_origins,
-    allow_methods=settings.cors.allowed_methods,
-    allow_headers=settings.cors.allowed_headers,
-    allow_credentials=settings.cors.allow_credentials,
-    max_age=settings.cors.max_age,
-)
+app.add_middleware(CORSMiddlewareWithSettings)
+
+if settings.app.environment.lower() != "live":
+
+    @app.middleware("http")
+    async def request_logging_middleware(request: Request, call_next):
+        return await log_requests(request, call_next)
 
 
 # --- imports routers ---

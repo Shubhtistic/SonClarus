@@ -1,15 +1,11 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Cookie, Response
 
-from src.sonclarus.shared.database import DbSessionDep
-from src.sonclarus.shared.responses import ApiResponse
+from src.sonclarus.api.responses import ApiResponse
 from src.sonclarus.users.exceptions import UserAlreadyExistsError
 
 from .dependencies import OptionalUserDep
-from .services import AuthService
-from .schemas import SignupRequest, LoginRequest
 from .exceptions import (
     InvalidCredentialsError,
     RefreshTokenExpiredError,
@@ -17,6 +13,8 @@ from .exceptions import (
     RefreshTokenRevokedError,
     SessionWindowExceededError,
 )
+from .schemas import LoginRequest, SignupRequest
+from .services import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -24,10 +22,10 @@ REFRESH_COOKIE_PATH = "/auth"
 
 
 @router.post("/signup")
-async def signup(payload: SignupRequest, db_session: DbSessionDep):
+async def signup(payload: SignupRequest):
     try:
         access_token, raw_refresh_token = await AuthService.signup(
-            db_session=db_session, signup_data=payload.model_dump()
+            signup_data=payload.model_dump()
         )
     except UserAlreadyExistsError:
         return ApiResponse.error(message="Email already registered", code=409)
@@ -52,10 +50,9 @@ async def signup(payload: SignupRequest, db_session: DbSessionDep):
 
 
 @router.post("/login")
-async def login(payload: LoginRequest, db_session: DbSessionDep):
+async def login(payload: LoginRequest):
     try:
         access_token, raw_refresh_token = await AuthService.login(
-            db_session=db_session,
             email=payload.email,
             plain_password=payload.password,
         )
@@ -80,18 +77,17 @@ async def login(payload: LoginRequest, db_session: DbSessionDep):
 @router.post("/refresh")
 async def refresh(
     response: Response,
-    db_session: DbSessionDep,
-    refresh_token: Optional[str] = Cookie(default=None, alias="refresh_token"),
+    refresh_token: str | None = Cookie(default=None, alias="refresh_token"),
 ):
     if refresh_token is None:
         return ApiResponse.error(message="No refresh token provided", code=401)
 
     try:
-        access_token, new_raw_refresh_token, max_window_limit = (
-            await AuthService.refresh(
-                db_session=db_session, raw_refresh_token=refresh_token
-            )
-        )
+        (
+            access_token,
+            new_raw_refresh_token,
+            max_window_limit,
+        ) = await AuthService.refresh(raw_refresh_token=refresh_token)
     except (
         RefreshTokenNotFoundError,
         RefreshTokenRevokedError,
@@ -104,9 +100,7 @@ async def refresh(
         response.delete_cookie(key="refresh_token", path=REFRESH_COOKIE_PATH)
         return response
 
-    remaining_seconds = int(
-        (max_window_limit - datetime.now(timezone.utc)).total_seconds()
-    )
+    remaining_seconds = int((max_window_limit - datetime.now(UTC)).total_seconds())
 
     remaining_seconds = max(remaining_seconds, 0)
 
@@ -128,19 +122,17 @@ async def refresh(
 @router.post("/logout", status_code=204)
 async def logout(
     response: Response,
-    db_session: DbSessionDep,
     optional_user_data: OptionalUserDep,
-    refresh_token: Optional[str] = Cookie(default=None, alias="refresh_token"),
+    refresh_token: str | None = Cookie(default=None, alias="refresh_token"),
 ):
     if refresh_token:
         response.delete_cookie(key="refresh_token", path=REFRESH_COOKIE_PATH)
 
     jti = optional_user_data.get("jti")
     exp = optional_user_data.get("exp")
-    ttl_seconds = exp - int(datetime.now(timezone.utc).timestamp()) if exp else None
+    ttl_seconds = exp - int(datetime.now(UTC).timestamp()) if exp else None
 
     await AuthService.logout(
-        db_session=db_session,
         raw_refresh_token=refresh_token,
         jti=jti,
         ttl_seconds=ttl_seconds,

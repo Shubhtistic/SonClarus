@@ -2,7 +2,7 @@
 
 The ML service runs audio-processing stages as independent Kafka consumers. Each worker downloads its input from S3-compatible storage, runs one model, uploads the resulting artifact, and publishes a completion event for the backend.
 
-**Runtime:** Python 3.11 · Kafka · S3 or RustFS · DeepFilterNet · SepFormer · Faster Whisper · Gemini
+**Runtime:** Python 3.11 · Kafka · S3 or RustFS · DeepFilterNet · MossFormer2 · Faster Whisper · Gemini
 
 [Project overview](../README.md) | [Backend guide](../backend/README.md) | [System architecture](../architecture.svg)
 
@@ -19,7 +19,7 @@ Each stage has its own process, Kafka group, and model lifecycle. With no flags,
 | Stage | Model | Output |
 |---|---|---|
 | `denoise` | DeepFilterNet3 | `<input>_cleaned.wav` |
-| `separate` | SpeechBrain SepFormer (`wsj02mix`) | `<input>_speaker_1.wav` and `<input>_speaker_2.wav` |
+| `separate` | ClearerVoice MossFormer2 (`MossFormer2_SS_16K`) | `<input>_speaker_1.wav` and `<input>_speaker_2.wav` |
 | `transcribe` | Faster Whisper | One `<input>_full_script.txt` transcript |
 | `summarize` | Gemini API | One `<transcript>_summary.txt` file |
 
@@ -42,6 +42,28 @@ Start all four workers:
 ```bash
 docker compose up --build -d
 ```
+
+### Use an NVIDIA GPU in Docker
+
+The ML Compose service requests the host NVIDIA GPU. Install and configure the
+NVIDIA Container Toolkit for Docker on the host, then start the service:
+
+```bash
+docker compose up --build -d
+```
+
+Confirm access from inside the running container:
+
+```bash
+docker compose exec ml python -c \
+  "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CUDA unavailable')"
+```
+
+The workers select CUDA independently, and can keep their models resident at
+the same time. A 4 GB GPU may run short of VRAM when multiple stages are active;
+check peak VRAM during a representative job before relying on GPU execution.
+This Compose service now requires Docker GPU support; use a separate CPU-only
+deployment configuration on hosts without an NVIDIA GPU.
 
 Follow logs or stop the service:
 
@@ -71,9 +93,9 @@ The launcher starts one process per selected stage, loads that stage's inference
 ## Resource and model behavior
 
 - `ML_TORCH_NUM_THREADS` defaults to `2` and sets the Torch intra-op thread count in each Torch-based worker. The value is per process, not a service-wide CPU limit.
-- Device selection defaults to CUDA when the installed Torch build and runtime can use it; otherwise the audio models use CPU. `SEPARATOR_DEVICE` and `WHISPER_DEVICE` can override their stage's device.
+- Device selection defaults to CUDA when the installed Torch build and runtime can use it; otherwise the audio models use CPU. ClearVoice chooses the available GPU with the most free memory for MossFormer2. `WHISPER_DEVICE` can override Whisper's device.
 - Each stage process holds its own model in memory. Running all stages concurrently uses more memory than running one stage; the model cache volume only persists downloaded model files, not loaded model memory.
-- The default transcription model is `base` with `int8` compute. Separator chunk size, VAD settings, denoise post-filtering, and other model parameters are configurable in `example.env`.
+- The default transcription model is `base` with `int8` compute. Separator model and cache path, VAD settings, denoise post-filtering, and other model parameters are configurable in `example.env`.
 
 ## Message handling
 
@@ -97,7 +119,7 @@ The hash helper reads the source in 1 MiB chunks, so it does not load the entire
 
 ## Configuration
 
-`shared/config.py` loads settings with Pydantic Settings from `ml/.env` and environment variables. [`example.env`](example.env) lists the supported values.
+`infrastructure/config.py` loads settings with Pydantic Settings from `ml/.env` and environment variables. [`example.env`](example.env) lists the supported values.
 
 | Group | Variables | Purpose |
 |---|---|---|
@@ -106,7 +128,7 @@ The hash helper reads the source in 1 MiB chunks, so it does not load the entire
 | Worker | `ML_WORK_DIR`, `ML_TORCH_NUM_THREADS` | Temporary files and per-process Torch thread count. |
 | Gemini | `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TIMEOUT_S` | Summarization API connection. |
 | Denoise | `DF_*` | DeepFilterNet model and post-filter settings. |
-| Separate | `SEPFORMER_*`, `SEPARATOR_*` | SepFormer source, cache path, sample rate, chunks, and device. |
+| Separate | `MOSSFORMER_*` | MossFormer2 model name, cache path, and 16 kHz sample rate. ClearVoice selects CUDA when it can see an NVIDIA GPU. |
 | Transcribe | `WHISPER_*` | Faster Whisper model, compute type, VAD, and device. |
 
 For `SASL_SSL`, also set `KAFKA_SASL_MECHANISM`, `KAFKA_SASL_USERNAME`, and `KAFKA_SASL_PASSWORD`. The ML `KAFKA_CLIENT_ID` should use the same shared application identifier as the backend; each ML consumer adds its stage name to its consumer client ID.
@@ -117,10 +139,10 @@ For `SASL_SSL`, also set `KAFKA_SASL_MECHANISM`, `KAFKA_SASL_USERNAME`, and `KAF
 ml/
 ├── src/sonclarus_ml/
 │   ├── denoise/       DeepFilterNet inference and input validation
-│   ├── separate/      SepFormer inference and audio preparation
+│   ├── separate/      MossFormer2 inference and audio preparation
 │   ├── transcribe/    Faster Whisper inference and transcript formatting
 │   ├── summarize/     Gemini summarization
-│   └── shared/        Settings, Kafka, S3, hashing, and consumer lifecycle
+│   └── infrastructure/ Settings, Kafka, S3, hashing, validation, and consumer lifecycle
 ├── start_consumers.py Process launcher and worker supervisor
 ├── Dockerfile         Python 3.11 runtime image
 ├── compose.yml        Worker service and shared networks

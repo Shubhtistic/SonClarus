@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import UUID, uuid7
-from sqlmodel import SQLModel, Field
-from sqlalchemy import CheckConstraint, Column, DateTime, BigInteger
+
+from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime
+from sqlmodel import Field, SQLModel
 
 
 class User(SQLModel, table=True):
@@ -22,31 +22,29 @@ class User(SQLModel, table=True):
     is_verified: bool = Field(default=True)
 
     storage_limit: int = Field(
-        default=524288000,
-        sa_column=Column(BigInteger, nullable=False, server_default="524288000"),
-    )  # 500 MiB
+        default=10_737_418_240,
+        sa_column=Column(BigInteger, nullable=False, server_default="10737418240"),
+    )  # Temporary research-test quota: 10 GiB
 
     storage_used: int = Field(
         default=0,
         sa_column=Column(BigInteger, nullable=False, server_default="0"),
     )
 
-    last_login_at: Optional[datetime] = Field(
+    last_login_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=lambda: datetime.now(UTC),
         sa_column=Column(DateTime(timezone=True)),
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(
-            DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc)
-        ),
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(DateTime(timezone=True), onupdate=lambda: datetime.now(UTC)),
     )
 
-    deleted_at: Optional[datetime] = Field(
+    deleted_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )
 

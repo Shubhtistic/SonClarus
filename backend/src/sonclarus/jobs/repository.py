@@ -1,21 +1,20 @@
-from datetime import datetime
 import logging
-from typing import Optional
+from datetime import datetime
 from uuid import UUID
 
 import orjson
 from sqlalchemy import Row, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.sonclarus.jobs.models import Job
-from src.sonclarus.jobs.enums import JobStatus, StageName
-from src.sonclarus.shared.database import (
+from src.sonclarus.infrastructure.redis_client import get_redis
+from src.sonclarus.infrastructure.repo_helpers import (
     create,
     execute_query,
     get_all,
     get_one_by_query,
 )
-from src.sonclarus.shared.redis_client import get_redis
+from src.sonclarus.jobs.enums import JobStatus, StageName
+from src.sonclarus.jobs.models import Job
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +31,14 @@ class JobRepository:
     @staticmethod
     async def get_job_for_user(
         db_session: AsyncSession, job_id: UUID, user_id: UUID
-    ) -> Optional[Job]:
+    ) -> Job | None:
         qry = select(Job).where(Job.id == job_id, Job.user_id == user_id)
         return await get_one_by_query(q=qry, db_session=db_session)
 
     @staticmethod
     async def get_job_for_ml_result(
         db_session: AsyncSession, job_id: UUID, user_id: UUID
-    ) -> Optional[Job]:
+    ) -> Job | None:
         """Load and lock a job before applying one ML stage result."""
         qry = (
             select(Job)
@@ -85,7 +84,7 @@ class JobRepository:
         return result.scalar_one_or_none() is not None
 
     @staticmethod
-    async def get_cached_download_links(user_id: UUID, job_id: UUID) -> Optional[dict]:
+    async def get_cached_download_links(user_id: UUID, job_id: UUID) -> dict | None:
         """Return cached download data, if it is still available."""
         redis = get_redis()
         raw = await redis.get(_download_links_cache_key(user_id, job_id))
